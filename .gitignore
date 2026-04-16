@@ -1,0 +1,11 @@
+esphome/secrets.yaml
+server/sign_data.json
+esphome/fonts/
+plans/
+preview.png
+data/
+__pycache__/
+*.pyc
+.env
+venv/
+.DS_Store
