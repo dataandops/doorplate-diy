@@ -44,7 +44,10 @@ def _load_fonts() -> dict:
             f"Missing fonts in {FONTS_DIR}: {missing}. "
             "Drop the Roboto TTFs into esphome/fonts/ (Apache-2.0, from google/fonts)."
         )
-    return {k: ImageFont.truetype(str(FONTS_DIR / fname), size) for k, (fname, size) in FONT_FILES.items()}
+    return {
+        k: ImageFont.truetype(str(FONTS_DIR / fname), size)
+        for k, (fname, size) in FONT_FILES.items()
+    }
 
 
 def _load_data(url: str | None) -> dict:
@@ -129,9 +132,16 @@ def render(data: dict, out_path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Render the e-ink sign layout to a PNG without hardware.")
-    parser.add_argument("--url", help="Fetch from a running server's /status endpoint instead of reading sign_data.json.")
-    parser.add_argument("--out", default="preview.png", help="Output PNG path (default: preview.png)")
+    parser = argparse.ArgumentParser(
+        description="Render the e-ink sign layout to a PNG without hardware."
+    )
+    parser.add_argument(
+        "--url",
+        help="Fetch from a running server's /status endpoint instead of reading sign_data.json.",
+    )
+    parser.add_argument(
+        "--out", default="preview.png", help="Output PNG path (default: preview.png)"
+    )
     args = parser.parse_args(argv)
 
     data = _load_data(args.url)

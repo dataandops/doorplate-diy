@@ -1,7 +1,7 @@
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -152,7 +152,7 @@ def create_app() -> Flask:
         if payload.get("new_joke"):
             state["joke_index"] = (state["joke_index"] + 1) % len(JOKES)
 
-        state["last_updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        state["last_updated"] = datetime.now(UTC).isoformat(timespec="seconds")
         _save_state(state)
         return jsonify(_public_state(state))
 

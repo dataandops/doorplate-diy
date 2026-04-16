@@ -67,7 +67,9 @@ def test_update_validates_required_fields(client):
 
 
 def test_schedule_round_trip(client):
-    payload = {"schedule": [{"time": "09:00", "title": "Standup"}, {"time": "10:30", "title": "Design"}]}
+    payload = {
+        "schedule": [{"time": "09:00", "title": "Standup"}, {"time": "10:30", "title": "Design"}]
+    }
     client.post("/update", json=payload)
 
     data = client.get("/status").get_json()
@@ -99,10 +101,14 @@ def test_auth_token_enforcement(auth_client):
     missing = auth_client.post("/update", json={"room_name": "X"})
     assert missing.status_code == 401
 
-    wrong = auth_client.post("/update", json={"room_name": "X"}, headers={"X-Doorplate-Token": "nope"})
+    wrong = auth_client.post(
+        "/update", json={"room_name": "X"}, headers={"X-Doorplate-Token": "nope"}
+    )
     assert wrong.status_code == 401
 
-    ok = auth_client.post("/update", json={"room_name": "X"}, headers={"X-Doorplate-Token": "s3cret"})
+    ok = auth_client.post(
+        "/update", json={"room_name": "X"}, headers={"X-Doorplate-Token": "s3cret"}
+    )
     assert ok.status_code == 200
 
 
