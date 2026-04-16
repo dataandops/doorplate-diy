@@ -1,0 +1,14 @@
+services:
+  doorplate:
+    build: .
+    image: doorplate-diy
+    container_name: doorplate
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Set to require X-Doorplate-Token on POST /update.
+      # Leave blank (or unset) for permissive LAN use.
+      DOORPLATE_TOKEN: "${DOORPLATE_TOKEN:-}"

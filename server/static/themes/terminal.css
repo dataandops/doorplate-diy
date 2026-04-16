@@ -1,0 +1,16 @@
+:root {
+  --ink: #00ff66;
+  --paper: #030603;
+  --paper-elevated: #0a140a;
+  --accent: #ffcc00;
+  --accent-ink: #000000;
+  --muted: #3a6a3a;
+  --muted-bg: #0a140a;
+  --border: #00ff66;
+  --shadow: rgba(0, 255, 102, 0.15);
+  --font-display: "DM Mono", ui-monospace, monospace;
+  --font-body: "DM Mono", ui-monospace, monospace;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --radius: 0px;
+  --divider: 1px dashed var(--border);
+}

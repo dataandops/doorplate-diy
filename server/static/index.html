@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>doorplate-diy · control panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+  <link id="theme-css" rel="stylesheet" href="/static/themes/ink.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+    body { min-height: 100vh; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 28px; border-bottom: var(--divider);
+    }
+    .brand { font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+    .brand span { color: var(--accent); }
+    .topbar-meta { display: flex; gap: 14px; align-items: center; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+    .theme-picker { font-family: var(--font-mono); font-size: 12px; background: var(--paper-elevated); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 8px; }
+
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: calc(100vh - 61px); }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+    .panel { padding: 28px; }
+    .panel-left { border-right: var(--divider); }
+    .panel-right { background: var(--muted-bg); }
+
+    h2 { font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 14px; color: var(--muted); }
+
+    .field { margin-bottom: 22px; }
+    label { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    input[type=text], input[type=time] {
+      width: 100%; padding: 10px 12px; font-family: var(--font-body); font-size: 16px;
+      background: var(--paper-elevated); color: var(--ink);
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .segmented button { padding: 10px 18px; background: var(--paper-elevated); color: var(--ink); border: 0; font-family: var(--font-mono); font-size: 13px; cursor: pointer; letter-spacing: 0.06em; }
+    .segmented button.on { background: var(--ink); color: var(--paper); }
+    .segmented button.on.in-use { background: var(--accent); color: var(--accent-ink); }
+
+    .schedule-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center; }
+    .schedule-row input { padding: 8px 10px; font-size: 14px; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--ink); padding: 6px 10px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; border-radius: var(--radius); }
+    .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+    .btn-primary {
+      width: 100%; padding: 16px; margin-top: 12px;
+      background: var(--ink); color: var(--paper);
+      font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase;
+      border: 0; border-radius: var(--radius); cursor: pointer;
+    }
+    .btn-primary:disabled { opacity: 0.5; cursor: wait; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+
+    /* Placard preview — mirrors the e-ink layout */
+    .placard {
+      background: #ffffff; color: #0a0a0a;
+      border: 1px solid #0a0a0a;
+      padding: 28px 32px; border-radius: var(--radius);
+      aspect-ratio: 648 / 480; display: flex; flex-direction: column; gap: 14px;
+      box-shadow: 0 10px 30px var(--shadow);
+      font-family: "DM Sans", sans-serif;
+    }
+    .placard .title { font-family: "DM Sans", sans-serif; font-weight: 700; font-size: 44px; line-height: 1; letter-spacing: -0.02em; }
+    .placard .badge {
+      align-self: flex-start;
+      padding: 6px 14px; font-family: "DM Mono", monospace; font-weight: 500; font-size: 14px; letter-spacing: 0.12em;
+      border: 2px solid #0a0a0a;
+    }
+    .placard .badge.in-use { background: #c4342a; color: #ffffff; border-color: #c4342a; }
+    .placard .schedule { display: flex; flex-direction: column; gap: 4px; font-size: 18px; }
+    .placard .schedule-line { display: grid; grid-template-columns: 70px 1fr; gap: 12px; }
+    .placard .schedule-empty { color: #7a7a7a; font-style: italic; font-size: 15px; }
+    .placard .divider { border-top: 1px solid #0a0a0a; margin: 6px 0; }
+    .placard .joke { font-family: "DM Mono", monospace; font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 4px; }
+    .placard .joke .q::before { content: "Q: "; font-weight: 500; }
+    .placard .joke .a::before { content: "A: "; font-weight: 500; }
+    .placard .footer { margin-top: auto; font-family: "DM Mono", monospace; font-size: 11px; color: #7a7a7a; display: flex; justify-content: space-between; }
+
+    .joke-card { margin-top: 22px; padding: 18px; background: var(--paper-elevated); border: 1px solid var(--border); border-radius: var(--radius); }
+    .joke-card .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .joke-card .title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+    .joke-card .q, .joke-card .a { font-family: var(--font-mono); font-size: 14px; line-height: 1.5; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 18px; background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 13px; border-radius: var(--radius); opacity: 0; transition: opacity 0.2s; }
+    .toast.show { opacity: 1; }
+    .toast.error { background: var(--accent); color: var(--accent-ink); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">doorplate<span>·</span>diy</div>
+    <div class="topbar-meta">
+      <span id="api-indicator"></span>
+      <select id="theme-picker" class="theme-picker" title="theme"></select>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel panel-left">
+      <h2>Sign Configuration</h2>
+
+      <div class="field">
+        <label for="room-name">Room name</label>
+        <input id="room-name" type="text" placeholder="Meeting Room" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label>Availability</label>
+        <div class="segmented" role="radiogroup">
+          <button id="btn-available" type="button">Available</button>
+          <button id="btn-in-use" type="button" class="in-use">In Use</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Schedule</label>
+        <div id="schedule-rows"></div>
+        <button id="btn-add-row" class="btn-ghost" type="button">+ Add time block</button>
+      </div>
+
+      <button id="btn-push" class="btn-primary" type="button">Push to Sign</button>
+    </section>
+
+    <section class="panel panel-right">
+      <h2>Live Placard Preview</h2>
+      <div class="placard" id="placard">
+        <div class="title" id="pl-title">Meeting Room</div>
+        <div class="badge" id="pl-badge">AVAILABLE</div>
+        <div class="schedule" id="pl-schedule"></div>
+        <div class="divider"></div>
+        <div class="joke">
+          <div class="q" id="pl-joke-q"></div>
+          <div class="a" id="pl-joke-a"></div>
+        </div>
+        <div class="footer">
+          <span id="pl-updated">—</span>
+          <span>doorplate-diy</span>
+        </div>
+      </div>
+
+      <div class="joke-card">
+        <div class="row">
+          <span class="title">Current joke</span>
+          <button id="btn-shuffle" class="btn-ghost" type="button">Shuffle →</button>
+        </div>
+        <div class="q" id="jc-q"></div>
+        <div class="a" id="jc-a"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const API_BASE = `${window.location.protocol}//${window.location.host}`;
+    document.getElementById("api-indicator").textContent = `API: ${API_BASE}`;
+
+    const state = { room_name: "Meeting Room", available: true, schedule: [], joke_q: "", joke_a: "", last_updated: null };
+
+    // ---------- theme ----------
+    async function loadThemes() {
+      const picker = document.getElementById("theme-picker");
+      let themes = ["ink"];
+      try {
+        const res = await fetch(`${API_BASE}/themes`);
+        const list = await res.json();
+        if (Array.isArray(list) && list.length) themes = list;
+      } catch (_) { /* fall back to single theme */ }
+
+      const saved = localStorage.getItem("doorplateTheme") || "ink";
+      picker.innerHTML = "";
+      for (const name of themes) {
+        const opt = document.createElement("option");
+        opt.value = name; opt.textContent = name;
+        if (name === saved) opt.selected = true;
+        picker.appendChild(opt);
+      }
+      applyTheme(picker.value);
+      picker.addEventListener("change", () => {
+        applyTheme(picker.value);
+        localStorage.setItem("doorplateTheme", picker.value);
+      });
+    }
+
+    function applyTheme(name) {
+      document.getElementById("theme-css").href = `/static/themes/${name}.css`;
+    }
+
+    // ---------- state ↔ UI ----------
+    function render() {
+      document.getElementById("room-name").value = state.room_name;
+      document.getElementById("btn-available").classList.toggle("on", state.available);
+      document.getElementById("btn-in-use").classList.toggle("on", !state.available);
+      renderScheduleRows();
+      renderPlacard();
+      renderJokeCard();
+    }
+
+    function renderScheduleRows() {
+      const container = document.getElementById("schedule-rows");
+      container.innerHTML = "";
+      state.schedule.forEach((row, i) => {
+        const el = document.createElement("div");
+        el.className = "schedule-row";
+        el.innerHTML = `
+          <input type="time" value="${row.time || ""}" data-i="${i}" data-field="time">
+          <input type="text" placeholder="Meeting title" value="${(row.title || "").replace(/"/g, "&quot;")}" data-i="${i}" data-field="title">
+          <button class="btn-ghost" data-remove="${i}" type="button">×</button>
+        `;
+        container.appendChild(el);
+      });
+      container.querySelectorAll("input").forEach(inp => {
+        inp.addEventListener("input", (e) => {
+          const i = +e.target.dataset.i;
+          const field = e.target.dataset.field;
+          state.schedule[i][field] = e.target.value;
+          renderPlacard();
+        });
+      });
+      container.querySelectorAll("button[data-remove]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          const i = +e.target.dataset.remove;
+          state.schedule.splice(i, 1);
+          renderScheduleRows();
+          renderPlacard();
+        });
+      });
+    }
+
+    function renderPlacard() {
+      document.getElementById("pl-title").textContent = state.room_name || "—";
+      const badge = document.getElementById("pl-badge");
+      badge.textContent = state.available ? "AVAILABLE" : "IN USE";
+      badge.classList.toggle("in-use", !state.available);
+
+      const sched = document.getElementById("pl-schedule");
+      sched.innerHTML = "";
+      const lines = state.schedule.filter(r => (r.time && r.time.trim()) || (r.title && r.title.trim()));
+      if (!lines.length) {
+        const empty = document.createElement("div");
+        empty.className = "schedule-empty";
+        empty.textContent = "No meetings scheduled";
+        sched.appendChild(empty);
+      } else {
+        lines.slice(0, 5).forEach(row => {
+          const line = document.createElement("div");
+          line.className = "schedule-line";
+          line.innerHTML = `<span>${row.time || ""}</span><span>${row.title || ""}</span>`;
+          sched.appendChild(line);
+        });
+      }
+
+      document.getElementById("pl-joke-q").textContent = state.joke_q || "";
+      document.getElementById("pl-joke-a").textContent = state.joke_a || "";
+      document.getElementById("pl-updated").textContent = state.last_updated || "not pushed yet";
+    }
+
+    function renderJokeCard() {
+      document.getElementById("jc-q").textContent = state.joke_q ? `Q: ${state.joke_q}` : "";
+      document.getElementById("jc-a").textContent = state.joke_a ? `A: ${state.joke_a}` : "";
+    }
+
+    // ---------- API ----------
+    async function fetchStatus() {
+      const res = await fetch(`${API_BASE}/status`);
+      const data = await res.json();
+      Object.assign(state, data);
+      render();
+    }
+
+    async function pushUpdate(extra = {}) {
+      const pushBtn = document.getElementById("btn-push");
+      pushBtn.disabled = true;
+      try {
+        const headers = { "Content-Type": "application/json" };
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const body = {
+          room_name: document.getElementById("room-name").value,
+          available: state.available,
+          schedule: state.schedule,
+          ...extra,
+        };
+        const res = await fetch(`${API_BASE}/update`, { method: "POST", headers, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json();
+        Object.assign(state, data);
+        render();
+        toast("Pushed to sign");
+      } catch (err) {
+        toast(`Push failed: ${err.message}`, true);
+      } finally {
+        pushBtn.disabled = false;
+      }
+    }
+
+    // ---------- events ----------
+    document.getElementById("room-name").addEventListener("input", (e) => {
+      state.room_name = e.target.value;
+      renderPlacard();
+    });
+    document.getElementById("btn-available").addEventListener("click", () => {
+      state.available = true;
+      render();
+    });
+    document.getElementById("btn-in-use").addEventListener("click", () => {
+      state.available = false;
+      render();
+    });
+    document.getElementById("btn-add-row").addEventListener("click", () => {
+      state.schedule.push({ time: "", title: "" });
+      renderScheduleRows();
+      renderPlacard();
+    });
+    document.getElementById("btn-push").addEventListener("click", () => pushUpdate());
+    document.getElementById("btn-shuffle").addEventListener("click", () => pushUpdate({ new_joke: true }));
+
+    // ---------- toast ----------
+    let toastTimer = null;
+    function toast(msg, isError = false) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.toggle("error", isError);
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+    }
+
+    // ---------- boot ----------
+    (async () => {
+      await loadThemes();
+      await fetchStatus();
+    })();
+  </script>
+</body>
+</html>
