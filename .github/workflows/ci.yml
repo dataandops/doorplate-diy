@@ -26,11 +26,12 @@ jobs:
       - name: Fetch fonts
         run: |
           mkdir -p esphome/fonts
-          base="https://github.com/google/fonts/raw/main/apache"
-          curl -sSL -o esphome/fonts/RobotoCondensed-Bold.ttf    "$base/robotocondensed/static/RobotoCondensed-Bold.ttf"
-          curl -sSL -o esphome/fonts/RobotoCondensed-Regular.ttf "$base/robotocondensed/static/RobotoCondensed-Regular.ttf"
-          curl -sSL -o esphome/fonts/RobotoMono-Regular.ttf      "$base/robotomono/static/RobotoMono-Regular.ttf"
-          ls -la esphome/fonts/
+          roboto="https://github.com/googlefonts/roboto/raw/main/src/hinted"
+          mono="https://github.com/googlefonts/robotomono/raw/main/fonts/ttf"
+          curl -fsSL -o esphome/fonts/RobotoCondensed-Bold.ttf    "$roboto/RobotoCondensed-Bold.ttf"
+          curl -fsSL -o esphome/fonts/RobotoCondensed-Regular.ttf "$roboto/RobotoCondensed-Regular.ttf"
+          curl -fsSL -o esphome/fonts/RobotoMono-Regular.ttf      "$mono/RobotoMono-Regular.ttf"
+          file esphome/fonts/*.ttf
 
       - name: Stub ESPHome secrets
         run: |

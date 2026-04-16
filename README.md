@@ -113,9 +113,11 @@ ESPHome and `render_preview.py` both expect Roboto TTFs in
 
 ```bash
 mkdir -p esphome/fonts && cd esphome/fonts
-curl -LO https://github.com/google/fonts/raw/main/apache/robotocondensed/static/RobotoCondensed-Bold.ttf
-curl -LO https://github.com/google/fonts/raw/main/apache/robotocondensed/static/RobotoCondensed-Regular.ttf
-curl -LO https://github.com/google/fonts/raw/main/apache/robotomono/static/RobotoMono-Regular.ttf
+roboto="https://github.com/googlefonts/roboto/raw/main/src/hinted"
+mono="https://github.com/googlefonts/robotomono/raw/main/fonts/ttf"
+curl -fLO "$roboto/RobotoCondensed-Bold.ttf"
+curl -fLO "$roboto/RobotoCondensed-Regular.ttf"
+curl -fLO "$mono/RobotoMono-Regular.ttf"
 ```
 
 Roboto is Apache-2.0 licensed, so it's safe to redistribute — we just don't
