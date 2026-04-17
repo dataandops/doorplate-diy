@@ -1,5 +1,6 @@
 esphome/secrets.yaml
 server/sign_data.json
+server/ics/
 esphome/fonts/
 plans/
 preview.png

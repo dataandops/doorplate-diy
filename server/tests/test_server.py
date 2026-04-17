@@ -13,6 +13,7 @@ import server as server_module  # noqa: E402
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setattr(server_module, "ICS_DIR", tmp_path / "ics")
     monkeypatch.delenv("DOORPLATE_TOKEN", raising=False)
     app = server_module.create_app()
     app.config["TESTING"] = True
@@ -23,6 +24,7 @@ def client(tmp_path, monkeypatch):
 @pytest.fixture
 def auth_client(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setattr(server_module, "ICS_DIR", tmp_path / "ics")
     monkeypatch.setenv("DOORPLATE_TOKEN", "s3cret")
     app = server_module.create_app()
     app.config["TESTING"] = True
