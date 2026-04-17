@@ -17,7 +17,7 @@ format:
 	ruff check --fix server/
 
 html-check:
-	html5validator --root server/static
+	html5validator --root server/static --ignore 'Property "aspect-ratio"'
 
 esphome-validate:
 	esphome config esphome/meeting-sign.yaml
