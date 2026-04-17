@@ -109,7 +109,7 @@ def test_sync_source_handles_fetch_failure():
     events, error = ics_sync.sync_source("work", "https://example.test/x.ics", fetcher=boom)
     assert events == []
     assert error is not None
-    assert "fetch failed" in error
+    assert "Network error" in error
 
 
 def test_sync_source_handles_parse_failure():
@@ -120,7 +120,7 @@ def test_sync_source_handles_parse_failure():
     )
     assert events == []
     assert error is not None
-    assert "parse failed" in error
+    assert "parse" in error.lower()
 
 
 def test_sync_worker_poll_once_updates_state(monkeypatch):
@@ -198,3 +198,64 @@ def test_sync_worker_construct_does_not_start_thread():
 
 
 _ = timedelta  # placeholder for future tests
+
+
+# ---------- robustness: URL normalization + error classification ----------
+
+
+def test_normalize_url_converts_webcal():
+    assert ics_sync.normalize_url("webcal://example.test/c.ics") == "https://example.test/c.ics"
+    assert ics_sync.normalize_url("webcals://example.test/c.ics") == "https://example.test/c.ics"
+    assert ics_sync.normalize_url("https://example.test/c.ics") == "https://example.test/c.ics"
+    assert ics_sync.normalize_url("  webcal://a.test/c.ics  ") == "https://a.test/c.ics"
+    assert ics_sync.normalize_url("") == ""
+
+
+def test_classify_response_404_message_is_actionable():
+    msg = ics_sync._classify_response(404, b"")
+    assert msg is not None
+    assert "404" in msg
+    assert "token was rotated" in msg or "regenerate" in msg.lower()
+
+
+def test_classify_response_403_mentions_secret_vs_public():
+    msg = ics_sync._classify_response(403, b"")
+    assert msg is not None
+    assert "Secret" in msg or "secret" in msg
+
+
+def test_classify_response_500_suggests_upstream_issue():
+    msg = ics_sync._classify_response(500, b"")
+    assert msg is not None and "500" in msg
+
+
+def test_classify_response_html_body_detected():
+    for head in (b"<!DOCTYPE html><html>...", b"<html><head>...", b"<?xml version='1.0'?>"):
+        msg = ics_sync._classify_response(200, head)
+        assert msg is not None
+        assert "HTML" in msg or "login" in msg.lower()
+
+
+def test_classify_response_missing_vcalendar_header():
+    msg = ics_sync._classify_response(200, b"just some random bytes, no ICS here")
+    assert msg is not None
+    assert "BEGIN:VCALENDAR" in msg or "iCalendar" in msg
+
+
+def test_classify_response_valid_ics_passes():
+    body = b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n"
+    assert ics_sync._classify_response(200, body) is None
+
+
+def test_sync_source_returns_friendly_404_message(monkeypatch):
+    def fake_fetcher(url):
+        raise ics_sync.IcsError(
+            "Server returned 404 — URL is wrong or the calendar's secret token was rotated."
+        )
+
+    events, error = ics_sync.sync_source(
+        "work", "https://example.test/bad.ics", fetcher=fake_fetcher
+    )
+    assert events == []
+    assert error is not None
+    assert "404" in error

@@ -420,6 +420,81 @@ def test_sources_refresh_requires_auth(auth_client):
     assert res.status_code == 401
 
 
+def test_source_accepts_webcal_url(client):
+    payload = {
+        "sources": {
+            "apple": {
+                "label": "Apple",
+                "accent": "#0091ea",
+                "short": "A",
+                "ics_url": "webcal://example.test/c.ics",
+            }
+        }
+    }
+    assert client.post("/update", json=payload).status_code == 200
+
+
+def test_sources_test_endpoint_success(client, monkeypatch):
+    import ics_sync as ics
+
+    sample = b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n"
+    monkeypatch.setattr(ics, "fetch_ics", lambda url, timeout=15: sample)
+
+    res = client.post("/sources/test", json={"url": "https://example.test/c.ics"})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["event_count"] == 0
+    assert data["resolved_url"] == "https://example.test/c.ics"
+
+
+def test_sources_test_endpoint_normalizes_webcal(client, monkeypatch):
+    import ics_sync as ics
+
+    captured = {}
+
+    def fake_fetch(url, timeout=15):
+        captured["url"] = url
+        return b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n"
+
+    monkeypatch.setattr(ics, "fetch_ics", fake_fetch)
+    res = client.post("/sources/test", json={"url": "webcal://example.test/c.ics"})
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["resolved_url"] == "https://example.test/c.ics"
+    assert captured["url"] == "https://example.test/c.ics"
+
+
+def test_sources_test_endpoint_returns_error_with_200(client, monkeypatch):
+    """Test failures still return HTTP 200 with ok:false — easier for the UI to handle."""
+    import ics_sync as ics
+
+    def boom(url, timeout=15):
+        raise ics.IcsError("Server returned 404 — URL is wrong or token rotated.")
+
+    monkeypatch.setattr(ics, "fetch_ics", boom)
+    res = client.post("/sources/test", json={"url": "https://example.test/bad.ics"})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is False
+    assert "404" in data["error"]
+
+
+def test_sources_test_endpoint_rejects_empty_url(client):
+    res = client.post("/sources/test", json={"url": ""})
+    assert res.status_code == 400
+
+
+def test_sources_test_endpoint_rejects_bad_scheme(client):
+    res = client.post("/sources/test", json={"url": "javascript:alert(1)"})
+    assert res.status_code == 400
+
+
+def test_sources_test_endpoint_requires_auth(auth_client):
+    res = auth_client.post("/sources/test", json={"url": "https://example.test/c.ics"})
+    assert res.status_code == 401
+
+
 def test_source_removal_clears_synced_schedule(client):
     client.post(
         "/update",
