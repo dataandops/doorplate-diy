@@ -31,28 +31,39 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
 - **Optional Docker deploy path** — done / S
   Dockerfile + docker-compose.yml as an alternative to pip install. Both
   paths are first-class; users pick whichever they prefer.
+- **Modes + animation** — done / M
+  Built-in presets (Meeting Room, Studio, Lab, Focus) plus Custom. Each
+  preset defines free/busy labels, accent colour, and a browser animation
+  (pulse / blink / scanline). E-ink gets a crude 2-frame flash on wake for
+  busy + animated modes.
+- **Configurable time format** — done / S
+  Footer rendering: Relative / 24h / 12h / ISO / Off. Rendered server-side.
+- **Calendar sources + ICS sync** — done / L
+  Central source catalog (`{label, accent, short, ics_url}`). Schedule rows
+  reference a source and render a colour chip in the browser / letter prefix
+  on e-ink. When a source has an ICS URL, a background worker polls every
+  10 min and auto-populates today's events. Works with Google, Apple,
+  Outlook, Calendly, Notion — anything that exports iCal. No OAuth.
 
 ## Next — committed, not yet built
 
-- **Google Calendar integration** — idea / L
-  Auto-populate `schedule` from a Google Calendar feed so users stop typing
-  meetings manually. Server-side OAuth, token refresh, and a mapping config
-  (calendar ID → room).
 - **Multiple signs from one server** — idea / M
   Key each sign by `room_id`; `/status/<room_id>` and `/update/<room_id>`.
   Control panel grows a room selector. ESPHome substitutes `room_id` into
   the request URL.
 - **Home Assistant integration** — idea / M
   Either MQTT publish on state change (HA consumes) or a native HA component
-  that wraps the REST API. Lets HA automations flip "In Use" based on
-  presence sensors, calendar, etc.
-- **Physical-sign theming** — idea / M
-  Swappable ESPHome lambda blocks for the display layout (mirror of the
-  control-panel CSS theme system). Requires factoring the lambda into
-  includable fragments.
+  that wraps the REST API. Lets HA automations flip busy based on presence
+  sensors, calendar, etc.
+- **Physical-sign layout theming** — idea / M
+  Swappable ESPHome lambda fragments for the display layout (mirror of the
+  control-panel CSS theme system).
 
 ## Later — exploring
 
+- **Google Calendar OAuth** — idea / L
+  For users who want richer data than ICS (attendees, response status,
+  conference links). Requires OAuth flow + token refresh.
 - **3D-printable custom case** — idea / M
   STL files for a purpose-built enclosure, checked into `case/`. Would
   replace the picture-frame hack as the default for pre-assembled kits.

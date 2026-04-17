@@ -62,6 +62,8 @@ def _load_data(url: str | None) -> dict:
         "joke_q": "Why did the scarecrow win an award?",
         "joke_a": "He was outstanding in his field.",
         "last_updated": None,
+        "status_label": "AVAILABLE",
+        "time_display": "not pushed yet",
     }
 
 
@@ -77,9 +79,10 @@ def render(data: dict, out_path: Path) -> None:
     draw.text((margin, y), data.get("room_name", ""), fill=BLACK, font=fonts["title"])
     y += 42
 
-    # Availability badge (B&W: filled black for IN USE, outlined for AVAILABLE)
+    # Availability badge — B&W panel, so busy state is filled black.
+    # Label and accent come from the server (mode resolution).
     available = bool(data.get("available", True))
-    label = "AVAILABLE" if available else "IN USE"
+    label = data.get("status_label") or ("AVAILABLE" if available else "IN USE")
     bx0, by0 = margin, y
     pad_x, pad_y = 8, 4
     text_w = int(draw.textlength(label, font=fonts["badge"]))
@@ -93,7 +96,7 @@ def render(data: dict, out_path: Path) -> None:
         draw.text((bx0 + pad_x, by0 + pad_y - 1), label, fill=WHITE, font=fonts["badge"])
     y = by1 + 12
 
-    # Schedule
+    # Schedule — schedule_display already carries the source "W·" prefix server-side.
     lines = data.get("schedule_display") or []
     if not lines:
         draw.text((margin, y), "No meetings scheduled", fill=MUTED, font=fonts["body"])
@@ -118,10 +121,12 @@ def render(data: dict, out_path: Path) -> None:
         draw.text((margin, y), f"A: {joke_a}", fill=BLACK, font=fonts["mono"])
         y += 20
 
-    # Footer
+    # Footer — time_display is rendered server-side per the chosen time_format.
     footer_y = HEIGHT - margin - 14
     draw.line((margin, footer_y - 6, WIDTH - margin, footer_y - 6), fill=MUTED, width=1)
-    updated = data.get("last_updated") or "not pushed yet"
+    updated = data.get("time_display")
+    if updated is None:
+        updated = data.get("last_updated") or "not pushed yet"
     draw.text((margin, footer_y), updated, fill=MUTED, font=fonts["small"])
     brand = "doorplate-diy"
     brand_w = int(draw.textlength(brand, font=fonts["small"]))

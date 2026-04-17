@@ -33,22 +33,41 @@
 
     .field { margin-bottom: 22px; }
     label { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-    input[type=text], input[type=time] {
+    input[type=text], input[type=time], select {
       width: 100%; padding: 10px 12px; font-family: var(--font-body); font-size: 16px;
       background: var(--paper-elevated); color: var(--ink);
       border: 1px solid var(--border); border-radius: var(--radius);
     }
-    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    input[type=color] {
+      width: 48px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper-elevated);
+    }
+    input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
     .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .segmented button { padding: 10px 18px; background: var(--paper-elevated); color: var(--ink); border: 0; font-family: var(--font-mono); font-size: 13px; cursor: pointer; letter-spacing: 0.06em; }
     .segmented button.on { background: var(--ink); color: var(--paper); }
     .segmented button.on.in-use { background: var(--accent); color: var(--accent-ink); }
 
-    .schedule-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center; }
-    .schedule-row input { padding: 8px 10px; font-size: 14px; }
+    .schedule-row { display: grid; grid-template-columns: 100px 1fr 120px auto; gap: 6px; margin-bottom: 8px; align-items: center; }
+    .schedule-row input, .schedule-row select { padding: 8px 10px; font-size: 14px; }
     .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--ink); padding: 6px 10px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; border-radius: var(--radius); }
     .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+    .source-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 8px; background: var(--paper); }
+    .source-row { display: grid; grid-template-columns: 44px 1fr 48px auto; gap: 6px; align-items: center; }
+    .source-row input { padding: 8px 10px; font-size: 14px; }
+    .source-ics { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 6px; }
+    .source-ics input { padding: 6px 8px; font-size: 12px; font-family: var(--font-mono); }
+    .source-status { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .source-status.error { color: var(--accent); }
+    .source-status.ok::before { content: "\2713  "; }
+    details.sources { border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper-elevated); padding: 10px 12px; }
+    details.sources > summary { font-family: var(--font-mono); font-size: 12px; cursor: pointer; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 0; }
+    details.sources[open] > summary { margin-bottom: 10px; }
+    .sources-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .custom-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .schedule-row.synced input, .schedule-row.synced select { opacity: 0.7; }
+    .synced-badge { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); border-radius: 2px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
 
     .btn-primary {
       width: 100%; padding: 16px; margin-top: 12px;
@@ -73,16 +92,34 @@
       align-self: flex-start;
       padding: 6px 14px; font-family: "DM Mono", monospace; font-weight: 500; font-size: 14px; letter-spacing: 0.12em;
       border: 2px solid #0a0a0a;
+      position: relative; overflow: hidden;
     }
-    .placard .badge.in-use { background: #c4342a; color: #ffffff; border-color: #c4342a; }
+    .placard .badge.in-use { color: #ffffff; }
+    .placard .badge.anim-pulse  { animation: badge-pulse 1.6s ease-in-out infinite; }
+    .placard .badge.anim-blink  { animation: badge-blink 1.0s steps(2) infinite; }
+    .placard .badge.anim-scanline::after {
+      content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+      background: linear-gradient(transparent 40%, rgba(255,255,255,0.45) 50%, transparent 60%);
+      animation: badge-scan 2.2s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes badge-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } }
+    @keyframes badge-blink { 50% { opacity: 0 } }
+    @keyframes badge-scan  { 0% { transform: translateY(-100%) } 100% { transform: translateY(100%) } }
+
     .placard .schedule { display: flex; flex-direction: column; gap: 4px; font-size: 18px; }
-    .placard .schedule-line { display: grid; grid-template-columns: 70px 1fr; gap: 12px; }
+    .placard .schedule-line { display: grid; grid-template-columns: auto 70px 1fr; gap: 8px; align-items: center; }
     .placard .schedule-empty { color: #7a7a7a; font-style: italic; font-size: 15px; }
     .placard .divider { border-top: 1px solid #0a0a0a; margin: 6px 0; }
     .placard .joke { font-family: "DM Mono", monospace; font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 4px; }
     .placard .joke .q::before { content: "Q: "; font-weight: 500; }
     .placard .joke .a::before { content: "A: "; font-weight: 500; }
     .placard .footer { margin-top: auto; font-family: "DM Mono", monospace; font-size: 11px; color: #7a7a7a; display: flex; justify-content: space-between; }
+
+    .source-chip {
+      display: inline-block; padding: 1px 5px; border-radius: 2px;
+      font-family: "DM Mono", monospace; font-size: 11px; color: #fff; letter-spacing: 0.04em; font-weight: 500;
+    }
 
     .joke-card { margin-top: 22px; padding: 18px; background: var(--paper-elevated); border: 1px solid var(--border); border-radius: var(--radius); }
     .joke-card .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -113,11 +150,43 @@
       </div>
 
       <div class="field">
-        <label>Availability</label>
-        <div class="segmented" role="radiogroup">
-          <button id="btn-available" type="button">Available</button>
-          <button id="btn-in-use" type="button" class="in-use">In Use</button>
+        <label for="mode-picker">Mode</label>
+        <select id="mode-picker"></select>
+        <div id="custom-labels" class="custom-labels" hidden>
+          <input id="custom-free" type="text" placeholder="When free" maxlength="24">
+          <input id="custom-busy" type="text" placeholder="When busy" maxlength="24">
         </div>
+      </div>
+
+      <div class="field">
+        <label>Status</label>
+        <div class="segmented" role="radiogroup">
+          <button id="btn-available" type="button">Free</button>
+          <button id="btn-in-use" type="button" class="in-use">Busy</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="time-format">Time format</label>
+        <select id="time-format">
+          <option value="relative">Relative — "3 min ago"</option>
+          <option value="24h">24-hour — "17:08"</option>
+          <option value="12h">12-hour — "5:08 PM"</option>
+          <option value="iso">ISO timestamp</option>
+          <option value="off">Off (hide)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Calendar sources</label>
+        <details class="sources">
+          <summary>Manage sources</summary>
+          <div id="source-rows"></div>
+          <div class="sources-actions">
+            <button id="btn-add-source" class="btn-ghost" type="button">+ Add source</button>
+            <button id="btn-refresh-sources" class="btn-ghost" type="button">↻ Refresh now</button>
+          </div>
+        </details>
       </div>
 
       <div class="field">
@@ -163,7 +232,22 @@
     const API_BASE = `${window.location.protocol}//${window.location.host}`;
     document.getElementById("api-indicator").textContent = `API: ${API_BASE}`;
 
-    const state = { room_name: "Meeting Room", available: true, schedule: [], joke_q: "", joke_a: "", last_updated: null };
+    const state = {
+      room_name: "Meeting Room",
+      available: true,
+      schedule: [],
+      joke_q: "", joke_a: "",
+      last_updated: null,
+      status_label: "AVAILABLE",
+      status_animation: "none",
+      status_accent: "#c4342a",
+      mode: "meeting_room",
+      modes: [],
+      custom_labels: { free: "AVAILABLE", busy: "IN USE" },
+      time_format: "relative",
+      time_display: "not pushed yet",
+      sources: {},
+    };
 
     // ---------- theme ----------
     async function loadThemes() {
@@ -176,7 +260,7 @@
       } catch (_) { /* fall back to single theme */ }
 
       const saved = localStorage.getItem("doorplateTheme") || "ink";
-      picker.innerHTML = "";
+      picker.replaceChildren();
       for (const name of themes) {
         const opt = document.createElement("option");
         opt.value = name; opt.textContent = name;
@@ -194,11 +278,161 @@
       document.getElementById("theme-css").href = `/static/themes/${name}.css`;
     }
 
+    // ---------- mode ↔ labels ----------
+    function currentModeLabels() {
+      if (state.mode === "custom") return { free: state.custom_labels.free, busy: state.custom_labels.busy };
+      const m = state.modes.find(x => x.key === state.mode);
+      return m ? { free: m.free, busy: m.busy } : { free: "FREE", busy: "BUSY" };
+    }
+
+    function renderModePicker() {
+      const picker = document.getElementById("mode-picker");
+      picker.replaceChildren();
+      for (const m of state.modes) {
+        const opt = document.createElement("option");
+        opt.value = m.key;
+        opt.textContent = m.label;
+        if (m.key === state.mode) opt.selected = true;
+        picker.appendChild(opt);
+      }
+      document.getElementById("custom-labels").hidden = state.mode !== "custom";
+      document.getElementById("custom-free").value = state.custom_labels.free || "";
+      document.getElementById("custom-busy").value = state.custom_labels.busy || "";
+    }
+
+    function renderSegmented() {
+      const { free, busy } = currentModeLabels();
+      document.getElementById("btn-available").textContent = free || "Free";
+      document.getElementById("btn-in-use").textContent = busy || "Busy";
+      document.getElementById("btn-available").classList.toggle("on", state.available);
+      document.getElementById("btn-in-use").classList.toggle("on", !state.available);
+    }
+
+    // ---------- sources ----------
+    function renderSourceRows() {
+      const container = document.getElementById("source-rows");
+      container.replaceChildren();
+      for (const [key, cfg] of Object.entries(state.sources)) {
+        const block = document.createElement("div");
+        block.className = "source-block";
+
+        const row = document.createElement("div");
+        row.className = "source-row";
+
+        const shortInput = document.createElement("input");
+        shortInput.type = "text";
+        shortInput.value = cfg.short || "";
+        shortInput.maxLength = 2;
+        shortInput.placeholder = "W";
+        shortInput.title = "1-2 char badge";
+        shortInput.addEventListener("input", (e) => {
+          state.sources[key].short = e.target.value.slice(0, 2);
+          renderScheduleRows();
+          renderPlacard();
+        });
+
+        const labelInput = document.createElement("input");
+        labelInput.type = "text";
+        labelInput.value = cfg.label || "";
+        labelInput.placeholder = "Work Calendar";
+        labelInput.addEventListener("input", (e) => {
+          state.sources[key].label = e.target.value;
+        });
+
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        colorInput.value = cfg.accent || "#0091ea";
+        colorInput.addEventListener("input", (e) => {
+          state.sources[key].accent = e.target.value;
+          renderPlacard();
+        });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn-ghost";
+        removeBtn.textContent = "×";
+        removeBtn.addEventListener("click", () => {
+          delete state.sources[key];
+          state.schedule.forEach(r => { if (r.source === key) delete r.source; });
+          renderSourceRows();
+          renderScheduleRows();
+          renderPlacard();
+        });
+
+        row.append(shortInput, labelInput, colorInput, removeBtn);
+        block.appendChild(row);
+
+        // ICS URL row
+        const icsWrap = document.createElement("div");
+        icsWrap.className = "source-ics";
+        const icsInput = document.createElement("input");
+        icsInput.type = "url";
+        icsInput.value = cfg.ics_url || "";
+        icsInput.placeholder = "https://calendar.google.com/calendar/ical/.../basic.ics (optional)";
+        icsInput.addEventListener("input", (e) => {
+          state.sources[key].ics_url = e.target.value.trim();
+        });
+        icsWrap.appendChild(icsInput);
+        block.appendChild(icsWrap);
+
+        // Status indicator
+        if (cfg.ics_url) {
+          const status = document.createElement("div");
+          status.className = "source-status";
+          if (cfg.last_sync_error) {
+            status.classList.add("error");
+            status.textContent = `Sync error: ${cfg.last_sync_error}`;
+          } else if (cfg.last_synced) {
+            status.classList.add("ok");
+            status.textContent = `Last synced ${cfg.last_synced}`;
+          } else {
+            status.textContent = "Not synced yet — push config, then hit Refresh now.";
+          }
+          block.appendChild(status);
+        }
+
+        container.appendChild(block);
+      }
+    }
+
+    async function refreshSources() {
+      const btn = document.getElementById("btn-refresh-sources");
+      btn.disabled = true;
+      btn.textContent = "Refreshing…";
+      try {
+        const headers = {};
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/sources/refresh`, { method: "POST", headers });
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        Object.assign(state, data);
+        render();
+        toast("Sources refreshed");
+      } catch (err) {
+        toast(`Refresh failed: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "↻ Refresh now";
+      }
+    }
+
+    function addSource() {
+      // Find a free key
+      let idx = Object.keys(state.sources).length + 1;
+      let key;
+      do { key = `source-${idx++}`; } while (key in state.sources);
+      state.sources[key] = { label: "New source", accent: "#0091ea", short: "S" };
+      renderSourceRows();
+    }
+
     // ---------- state ↔ UI ----------
     function render() {
       document.getElementById("room-name").value = state.room_name;
-      document.getElementById("btn-available").classList.toggle("on", state.available);
-      document.getElementById("btn-in-use").classList.toggle("on", !state.available);
+      renderModePicker();
+      renderSegmented();
+      document.getElementById("time-format").value = state.time_format;
+      renderSourceRows();
       renderScheduleRows();
       renderPlacard();
       renderJokeCard();
@@ -207,13 +441,17 @@
     function renderScheduleRows() {
       const container = document.getElementById("schedule-rows");
       container.replaceChildren();
+      const sourceKeys = Object.keys(state.sources);
       state.schedule.forEach((row, i) => {
         const el = document.createElement("div");
         el.className = "schedule-row";
+        const isSynced = row.synced === true;
+        if (isSynced) el.classList.add("synced");
 
         const timeInput = document.createElement("input");
         timeInput.type = "time";
         timeInput.value = row.time || "";
+        timeInput.disabled = isSynced;
         timeInput.addEventListener("input", (e) => {
           state.schedule[i].time = e.target.value;
           renderPlacard();
@@ -223,22 +461,51 @@
         titleInput.type = "text";
         titleInput.placeholder = "Meeting title";
         titleInput.value = row.title || "";
+        titleInput.disabled = isSynced;
         titleInput.addEventListener("input", (e) => {
           state.schedule[i].title = e.target.value;
           renderPlacard();
         });
 
+        let sourceCell;
+        if (isSynced) {
+          sourceCell = document.createElement("span");
+          sourceCell.className = "synced-badge";
+          sourceCell.textContent = "synced";
+          sourceCell.title = `Pulled from ${state.sources[row.source]?.label || row.source}`;
+        } else {
+          sourceCell = document.createElement("select");
+          const noneOpt = document.createElement("option");
+          noneOpt.value = ""; noneOpt.textContent = "No source";
+          sourceCell.appendChild(noneOpt);
+          for (const key of sourceKeys) {
+            const opt = document.createElement("option");
+            opt.value = key;
+            opt.textContent = state.sources[key].label || key;
+            if (row.source === key) opt.selected = true;
+            sourceCell.appendChild(opt);
+          }
+          sourceCell.addEventListener("change", (e) => {
+            if (e.target.value) state.schedule[i].source = e.target.value;
+            else delete state.schedule[i].source;
+            renderPlacard();
+          });
+        }
+
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
         removeBtn.className = "btn-ghost";
         removeBtn.textContent = "×";
-        removeBtn.addEventListener("click", () => {
-          state.schedule.splice(i, 1);
-          renderScheduleRows();
-          renderPlacard();
-        });
+        removeBtn.disabled = isSynced;
+        if (!isSynced) {
+          removeBtn.addEventListener("click", () => {
+            state.schedule.splice(i, 1);
+            renderScheduleRows();
+            renderPlacard();
+          });
+        }
 
-        el.append(timeInput, titleInput, removeBtn);
+        el.append(timeInput, titleInput, sourceCell, removeBtn);
         container.appendChild(el);
       });
     }
@@ -246,8 +513,22 @@
     function renderPlacard() {
       document.getElementById("pl-title").textContent = state.room_name || "—";
       const badge = document.getElementById("pl-badge");
-      badge.textContent = state.available ? "AVAILABLE" : "IN USE";
+      const { free, busy } = currentModeLabels();
+      const label = state.available ? free : busy;
+      badge.textContent = label || (state.available ? "FREE" : "BUSY");
       badge.classList.toggle("in-use", !state.available);
+      // Reset animation classes
+      badge.classList.remove("anim-pulse", "anim-blink", "anim-scanline");
+      if (!state.available && state.status_animation && state.status_animation !== "none") {
+        badge.classList.add(`anim-${state.status_animation}`);
+      }
+      if (!state.available) {
+        badge.style.background = state.status_accent || "#c4342a";
+        badge.style.borderColor = state.status_accent || "#c4342a";
+      } else {
+        badge.style.background = "";
+        badge.style.borderColor = "";
+      }
 
       const sched = document.getElementById("pl-schedule");
       sched.replaceChildren();
@@ -261,18 +542,29 @@
         lines.slice(0, 5).forEach(row => {
           const line = document.createElement("div");
           line.className = "schedule-line";
+
+          const chipSlot = document.createElement("span");
+          if (row.source && state.sources[row.source]) {
+            const src = state.sources[row.source];
+            const chip = document.createElement("span");
+            chip.className = "source-chip";
+            chip.style.background = src.accent;
+            chip.textContent = src.short || "?";
+            chipSlot.appendChild(chip);
+          }
+
           const timeSpan = document.createElement("span");
           timeSpan.textContent = row.time || "";
           const titleSpan = document.createElement("span");
           titleSpan.textContent = row.title || "";
-          line.append(timeSpan, titleSpan);
+          line.append(chipSlot, timeSpan, titleSpan);
           sched.appendChild(line);
         });
       }
 
       document.getElementById("pl-joke-q").textContent = state.joke_q || "";
       document.getElementById("pl-joke-a").textContent = state.joke_a || "";
-      document.getElementById("pl-updated").textContent = state.last_updated || "not pushed yet";
+      document.getElementById("pl-updated").textContent = state.time_display || "";
     }
 
     function renderJokeCard() {
@@ -288,6 +580,29 @@
       render();
     }
 
+    function buildPushBody(extra = {}) {
+      // Build the schedule payload: filter orphaned sources. Synced items
+      // are echoed back with synced:true so the server can drop them —
+      // the worker is the source of truth for those.
+      const allowed = new Set(Object.keys(state.sources));
+      const schedule = state.schedule.map(r => {
+        const out = { time: r.time || "", title: r.title || "" };
+        if (r.source && allowed.has(r.source)) out.source = r.source;
+        if (r.synced === true) out.synced = true;
+        return out;
+      });
+      return {
+        room_name: document.getElementById("room-name").value,
+        available: state.available,
+        mode: state.mode,
+        custom_labels: state.custom_labels,
+        time_format: state.time_format,
+        sources: state.sources,
+        schedule,
+        ...extra,
+      };
+    }
+
     async function pushUpdate(extra = {}) {
       const pushBtn = document.getElementById("btn-push");
       pushBtn.disabled = true;
@@ -295,14 +610,15 @@
         const headers = { "Content-Type": "application/json" };
         const token = localStorage.getItem("doorplateToken");
         if (token) headers["X-Doorplate-Token"] = token;
-        const body = {
-          room_name: document.getElementById("room-name").value,
-          available: state.available,
-          schedule: state.schedule,
-          ...extra,
-        };
-        const res = await fetch(`${API_BASE}/update`, { method: "POST", headers, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error(`${res.status}`);
+        const res = await fetch(`${API_BASE}/update`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(buildPushBody(extra)),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.status }));
+          throw new Error(err.error || res.status);
+        }
         const data = await res.json();
         Object.assign(state, data);
         render();
@@ -321,12 +637,43 @@
     });
     document.getElementById("btn-available").addEventListener("click", () => {
       state.available = true;
-      render();
+      renderSegmented();
+      renderPlacard();
     });
     document.getElementById("btn-in-use").addEventListener("click", () => {
       state.available = false;
-      render();
+      renderSegmented();
+      renderPlacard();
     });
+    document.getElementById("mode-picker").addEventListener("change", (e) => {
+      state.mode = e.target.value;
+      // When switching to a non-custom preset, pull the preset's anim/accent
+      // into local state so the preview updates before the next push.
+      const m = state.modes.find(x => x.key === state.mode);
+      if (m && state.mode !== "custom") {
+        // animation + accent aren't on the modes list; server will resolve them on push.
+        // For immediate preview, re-fetch after push; for now just re-render labels.
+      }
+      renderModePicker();
+      renderSegmented();
+      renderPlacard();
+    });
+    document.getElementById("custom-free").addEventListener("input", (e) => {
+      state.custom_labels.free = e.target.value;
+      renderSegmented();
+      renderPlacard();
+    });
+    document.getElementById("custom-busy").addEventListener("input", (e) => {
+      state.custom_labels.busy = e.target.value;
+      renderSegmented();
+      renderPlacard();
+    });
+    document.getElementById("time-format").addEventListener("change", (e) => {
+      state.time_format = e.target.value;
+      // Server formats time_display on push; for now preview just shows last value.
+    });
+    document.getElementById("btn-add-source").addEventListener("click", () => addSource());
+    document.getElementById("btn-refresh-sources").addEventListener("click", () => refreshSources());
     document.getElementById("btn-add-row").addEventListener("click", () => {
       state.schedule.push({ time: "", title: "" });
       renderScheduleRows();
@@ -343,7 +690,7 @@
       el.classList.toggle("error", isError);
       el.classList.add("show");
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
     }
 
     // ---------- boot ----------
