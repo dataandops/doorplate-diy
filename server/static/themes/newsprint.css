@@ -1,0 +1,16 @@
+:root {
+  --ink: #1a1a1a;
+  --paper: #e8e4d8;
+  --paper-elevated: #f2eee2;
+  --accent: #7a2e2a;
+  --accent-ink: #f2eee2;
+  --muted: #6a665c;
+  --muted-bg: #d8d4c8;
+  --border: #1a1a1a;
+  --shadow: rgba(26, 26, 26, 0.12);
+  --font-display: "Syne", serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --radius: 2px;
+  --divider: 2px double var(--border);
+}

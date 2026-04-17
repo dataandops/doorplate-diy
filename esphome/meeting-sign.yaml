@@ -1,0 +1,217 @@
+substitutions:
+  name: meeting-sign
+  friendly_name: Meeting Sign
+  # mDNS hostname of the Mac running the Flask server. macOS advertises
+  # <hostname>.local via Bonjour automatically — find yours with
+  # `scutil --get LocalHostName`. If DHCP churn breaks this, reserve a
+  # static lease or substitute a raw IP.
+  server_host: "your-mac.local"
+  server_port: "5000"
+  update_interval: "15min"
+  # Optional shared secret matching DOORPLATE_TOKEN on the server. Blank
+  # disables auth (fine for trusted LAN). Set to enable X-Doorplate-Token.
+  doorplate_token: ""
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: -100
+    then:
+      - wait_until:
+          condition:
+            wifi.connected:
+      - delay: 500ms
+      - http_request.get:
+          url: "http://${server_host}:${server_port}/status"
+          request_headers:
+            X-Doorplate-Token: "${doorplate_token}"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) {
+                    ESP_LOGW("doorplate", "server returned %d", response->status_code);
+                    return;
+                  }
+                  json::parse_json(body, [](JsonObject root) -> bool {
+                    id(room_name) = root["room_name"] | "Meeting Room";
+                    id(available) = root["available"] | true;
+                    id(joke_q) = root["joke_q"] | "";
+                    id(joke_a) = root["joke_a"] | "";
+                    id(last_updated) = root["last_updated"] | "";
+
+                    std::string lines;
+                    if (root["schedule_display"].is<JsonArray>()) {
+                      bool first = true;
+                      for (auto v : root["schedule_display"].as<JsonArray>()) {
+                        if (!first) lines += "|";
+                        lines += v.as<const char *>();
+                        first = false;
+                      }
+                    }
+                    id(schedule_lines) = lines;
+                    return true;
+                  });
+      - component.update: eink
+      - delay: 2s
+      - deep_sleep.enter: deep_sleep_1
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+
+time:
+  - platform: sntp
+    id: sntp_time
+
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: 30s
+  sleep_duration: ${update_interval}
+
+http_request:
+  id: http_client
+  timeout: 10s
+  verify_ssl: false
+
+# Waveshare ESP32 Driver Board (v2.3) standard e-paper HAT pinout.
+spi:
+  clk_pin: GPIO13
+  mosi_pin: GPIO14
+
+# ---- Globals populated from /status ----
+globals:
+  - id: room_name
+    type: std::string
+    restore_value: no
+    initial_value: '"Meeting Room"'
+  - id: available
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: schedule_lines
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: joke_q
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: joke_a
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: last_updated
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+font:
+  - file: "fonts/RobotoCondensed-Bold.ttf"
+    id: font_title
+    size: 36
+  - file: "fonts/RobotoCondensed-Regular.ttf"
+    id: font_body
+    size: 20
+  - file: "fonts/RobotoMono-Regular.ttf"
+    id: font_mono
+    size: 16
+  - file: "fonts/RobotoCondensed-Bold.ttf"
+    id: font_badge
+    size: 14
+  - file: "fonts/RobotoCondensed-Regular.ttf"
+    id: font_small
+    size: 12
+
+display:
+  - platform: waveshare_epaper
+    id: eink
+    cs_pin: GPIO15
+    dc_pin: GPIO27
+    busy_pin: GPIO25
+    reset_pin: GPIO26
+    model: 4.20in  # Waveshare 4.2" B&W — matches Standard kit
+    update_interval: never  # we drive updates manually on boot
+    rotation: 0
+    lambda: |-
+      auto it = id(eink);
+      const int W = it.get_width();
+      const int H = it.get_height();
+      const int margin = 16;
+      int y = margin;
+
+      // Title
+      it.printf(margin, y, id(font_title), "%s", id(room_name).c_str());
+      y += 42;
+
+      // Availability badge — width computed from text to match render_preview.py.
+      // B&W panel: filled black box for IN USE, outlined box for AVAILABLE.
+      const char *label = id(available) ? "AVAILABLE" : "IN USE";
+      const int badge_pad_x = 8;
+      const int badge_h = 22;
+      int tx, ty, tw, th;
+      it.get_text_bounds(0, 0, label, id(font_badge), TextAlign::TOP_LEFT, &tx, &ty, &tw, &th);
+      int badge_w = tw + badge_pad_x * 2;
+      if (id(available)) {
+        it.rectangle(margin, y, badge_w, badge_h);
+        it.printf(margin + badge_pad_x, y + 3, id(font_badge), "%s", label);
+      } else {
+        it.filled_rectangle(margin, y, badge_w, badge_h);
+        it.printf(margin + badge_pad_x, y + 3, id(font_badge), COLOR_OFF, "%s", label);
+      }
+      y += badge_h + 12;
+
+      // Schedule — schedule_lines is pipe-delimited, render up to 4 lines
+      std::string s = id(schedule_lines);
+      if (s.empty()) {
+        it.printf(margin, y, id(font_body), "No meetings scheduled");
+        y += 24;
+      } else {
+        int count = 0;
+        size_t start = 0;
+        while (start < s.size() && count < 4) {
+          size_t pipe = s.find('|', start);
+          std::string line = (pipe == std::string::npos) ? s.substr(start) : s.substr(start, pipe - start);
+          it.printf(margin, y, id(font_body), "%s", line.c_str());
+          y += 24;
+          count++;
+          if (pipe == std::string::npos) break;
+          start = pipe + 1;
+        }
+      }
+
+      // Divider
+      y += 6;
+      it.line(margin, y, W - margin, y);
+      y += 10;
+
+      // Joke Q/A
+      if (!id(joke_q).empty()) {
+        it.printf(margin, y, id(font_mono), "Q: %s", id(joke_q).c_str());
+        y += 20;
+      }
+      if (!id(joke_a).empty()) {
+        it.printf(margin, y, id(font_mono), "A: %s", id(joke_a).c_str());
+        y += 20;
+      }
+
+      // Footer
+      int footer_y = H - margin - 14;
+      it.line(margin, footer_y - 6, W - margin, footer_y - 6);
+      it.printf(margin, footer_y, id(font_small), "%s",
+                id(last_updated).empty() ? "not pushed yet" : id(last_updated).c_str());
+      it.printf(W - margin, footer_y, id(font_small), TextAlign::TOP_RIGHT, "doorplate-diy");
+
