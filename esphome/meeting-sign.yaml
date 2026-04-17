@@ -15,6 +15,47 @@ substitutions:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
+  on_boot:
+    priority: -100
+    then:
+      - wait_until:
+          condition:
+            wifi.connected:
+      - delay: 500ms
+      - http_request.get:
+          url: "http://${server_host}:${server_port}/status"
+          request_headers:
+            X-Doorplate-Token: "${doorplate_token}"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) {
+                    ESP_LOGW("doorplate", "server returned %d", response->status_code);
+                    return;
+                  }
+                  json::parse_json(body, [](JsonObject root) -> bool {
+                    id(room_name) = root["room_name"] | "Meeting Room";
+                    id(available) = root["available"] | true;
+                    id(joke_q) = root["joke_q"] | "";
+                    id(joke_a) = root["joke_a"] | "";
+                    id(last_updated) = root["last_updated"] | "";
+
+                    std::string lines;
+                    if (root["schedule_display"].is<JsonArray>()) {
+                      bool first = true;
+                      for (auto v : root["schedule_display"].as<JsonArray>()) {
+                        if (!first) lines += "|";
+                        lines += v.as<const char *>();
+                        first = false;
+                      }
+                    }
+                    id(schedule_lines) = lines;
+                    return true;
+                  });
+      - component.update: eink
+      - delay: 2s
+      - deep_sleep.enter: deep_sleep_1
 
 esp32:
   board: esp32dev
@@ -81,25 +122,19 @@ globals:
 font:
   - file: "fonts/RobotoCondensed-Bold.ttf"
     id: font_title
-    size: 52
+    size: 36
   - file: "fonts/RobotoCondensed-Regular.ttf"
     id: font_body
-    size: 28
+    size: 20
   - file: "fonts/RobotoMono-Regular.ttf"
     id: font_mono
-    size: 24
+    size: 16
   - file: "fonts/RobotoCondensed-Bold.ttf"
     id: font_badge
-    size: 20
+    size: 14
   - file: "fonts/RobotoCondensed-Regular.ttf"
     id: font_small
-    size: 18
-
-color:
-  - id: color_red
-    red: 100%
-    green: 0%
-    blue: 0%
+    size: 12
 
 display:
   - platform: waveshare_epaper
@@ -108,49 +143,50 @@ display:
     dc_pin: GPIO27
     busy_pin: GPIO25
     reset_pin: GPIO26
-    model: 5.83in-b-v2
+    model: 4.20in  # Waveshare 4.2" B&W — matches Standard kit
     update_interval: never  # we drive updates manually on boot
     rotation: 0
     lambda: |-
       auto it = id(eink);
       const int W = it.get_width();
       const int H = it.get_height();
-      const int margin = 28;
+      const int margin = 16;
       int y = margin;
 
       // Title
       it.printf(margin, y, id(font_title), "%s", id(room_name).c_str());
-      y += 58;
+      y += 42;
 
       // Availability badge — width computed from text to match render_preview.py.
+      // B&W panel: filled black box for IN USE, outlined box for AVAILABLE.
       const char *label = id(available) ? "AVAILABLE" : "IN USE";
-      const int badge_pad_x = 12;
-      const int badge_h = 32;
+      const int badge_pad_x = 8;
+      const int badge_h = 22;
       int tx, ty, tw, th;
       it.get_text_bounds(0, 0, label, id(font_badge), TextAlign::TOP_LEFT, &tx, &ty, &tw, &th);
       int badge_w = tw + badge_pad_x * 2;
       if (id(available)) {
         it.rectangle(margin, y, badge_w, badge_h);
-        it.printf(margin + badge_pad_x, y + 4, id(font_badge), "%s", label);
+        it.printf(margin + badge_pad_x, y + 3, id(font_badge), "%s", label);
       } else {
-        it.filled_rectangle(margin, y, badge_w, badge_h, id(color_red));
-        it.printf(margin + badge_pad_x, y + 4, id(font_badge), COLOR_OFF, id(color_red), "%s", label);
+        it.filled_rectangle(margin, y, badge_w, badge_h);
+        it.printf(margin + badge_pad_x, y + 3, id(font_badge), COLOR_OFF, "%s", label);
       }
-      y += badge_h + 18;
+      y += badge_h + 12;
 
-      // Schedule — schedule_lines is pipe-delimited, render up to 5 lines
+      // Schedule — schedule_lines is pipe-delimited, render up to 4 lines
       std::string s = id(schedule_lines);
       if (s.empty()) {
         it.printf(margin, y, id(font_body), "No meetings scheduled");
-        y += 34;
+        y += 24;
       } else {
         int count = 0;
         size_t start = 0;
-        while (start < s.size() && count < 5) {
+        while (start < s.size() && count < 4) {
           size_t pipe = s.find('|', start);
           std::string line = (pipe == std::string::npos) ? s.substr(start) : s.substr(start, pipe - start);
           it.printf(margin, y, id(font_body), "%s", line.c_str());
-          y += 34;
+          y += 24;
           count++;
           if (pipe == std::string::npos) break;
           start = pipe + 1;
@@ -158,66 +194,24 @@ display:
       }
 
       // Divider
-      y += 8;
+      y += 6;
       it.line(margin, y, W - margin, y);
-      y += 16;
+      y += 10;
 
       // Joke Q/A
       if (!id(joke_q).empty()) {
         it.printf(margin, y, id(font_mono), "Q: %s", id(joke_q).c_str());
-        y += 32;
+        y += 20;
       }
       if (!id(joke_a).empty()) {
         it.printf(margin, y, id(font_mono), "A: %s", id(joke_a).c_str());
-        y += 32;
+        y += 20;
       }
 
       // Footer
-      int footer_y = H - margin - 20;
-      it.line(margin, footer_y - 8, W - margin, footer_y - 8);
+      int footer_y = H - margin - 14;
+      it.line(margin, footer_y - 6, W - margin, footer_y - 6);
       it.printf(margin, footer_y, id(font_small), "%s",
                 id(last_updated).empty() ? "not pushed yet" : id(last_updated).c_str());
       it.printf(W - margin, footer_y, id(font_small), TextAlign::TOP_RIGHT, "doorplate-diy");
 
-# ---- Boot sequence: fetch, parse, render, sleep ----
-on_boot:
-  priority: -100
-  then:
-    - wait_until:
-        condition:
-          wifi.connected:
-    - delay: 500ms
-    - http_request.get:
-        url: "http://${server_host}:${server_port}/status"
-        headers:
-          X-Doorplate-Token: "${doorplate_token}"
-        capture_response: true
-        on_response:
-          then:
-            - lambda: |-
-                if (response->status_code != 200) {
-                  ESP_LOGW("doorplate", "server returned %d", response->status_code);
-                  return;
-                }
-                json::parse_json(body, [](JsonObject root) -> bool {
-                  id(room_name) = root["room_name"] | "Meeting Room";
-                  id(available) = root["available"] | true;
-                  id(joke_q) = root["joke_q"] | "";
-                  id(joke_a) = root["joke_a"] | "";
-                  id(last_updated) = root["last_updated"] | "";
-
-                  std::string lines;
-                  if (root["schedule_display"].is<JsonArray>()) {
-                    bool first = true;
-                    for (auto v : root["schedule_display"].as<JsonArray>()) {
-                      if (!first) lines += "|";
-                      lines += v.as<const char *>();
-                      first = false;
-                    }
-                  }
-                  id(schedule_lines) = lines;
-                  return true;
-                });
-    - component.update: eink
-    - delay: 2s
-    - deep_sleep.enter: deep_sleep_1

@@ -100,7 +100,7 @@ You don't need an ESP32 or e-ink panel to try this end-to-end:
    right-side placard preview mirrors what the e-ink will render as you
    type.
 2. **Pixel-accurate PNG** — `make preview` (or
-   `python server/render_preview.py`) produces `preview.png` at 648×480,
+   `python server/render_preview.py`) produces `preview.png` at 400×300,
    using the same fonts and layout as the ESPHome lambda.
 3. **Firmware validation** — `make esphome-validate` checks the YAML and
    `esphome compile esphome/meeting-sign.yaml` builds the firmware binary.

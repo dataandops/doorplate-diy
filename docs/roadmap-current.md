@@ -11,8 +11,10 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
 - **Flask control panel + `/status` + `/update` + `/themes`** — done / M
   Single-room meeting sign driven from a Mac. Dark ink/paper control panel,
   live placard preview, swappable CSS themes.
-- **ESPHome config for Waveshare 5.83" tri-color** — done / M
+- **ESPHome config for Waveshare 4.2" B&W** — done / M
   Deep-sleep wake → HTTP GET → render → sleep. 15-minute refresh cadence.
+  Tri-color 4.2" (`4.20in-bv2-bwr`) and 7.5" tri-color are the next supported
+  sizes when we want to upgrade.
 - **CI status checks** — done / S
   `ruff` + `black --check`, `pytest`, `html5validator`, `esphome config`. Runs
   on every push and PR, blocks merge on failure.

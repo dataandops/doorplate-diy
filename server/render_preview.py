@@ -1,6 +1,6 @@
 """Hardware-free e-ink simulator.
 
-Renders what the 5.83" tri-color panel will show, using the same fonts and
+Renders what the Waveshare 4.2" B&W panel will show, using the same fonts and
 layout as the ESPHome display lambda. Useful for iterating on the sign before
 you have hardware (or while the ESP32 is in deep sleep).
 
@@ -22,18 +22,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 FONTS_DIR = REPO_ROOT / "esphome" / "fonts"
 DATA_FILE = Path(__file__).resolve().parent / "sign_data.json"
 
-WIDTH, HEIGHT = 648, 480
+WIDTH, HEIGHT = 400, 300
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-RED = (196, 52, 42)
 MUTED = (120, 120, 120)
 
 FONT_FILES = {
-    "title": ("RobotoCondensed-Bold.ttf", 52),
-    "body": ("RobotoCondensed-Regular.ttf", 28),
-    "mono": ("RobotoMono-Regular.ttf", 24),
-    "small": ("RobotoCondensed-Regular.ttf", 18),
-    "badge": ("RobotoCondensed-Bold.ttf", 20),
+    "title": ("RobotoCondensed-Bold.ttf", 36),
+    "body": ("RobotoCondensed-Regular.ttf", 20),
+    "mono": ("RobotoMono-Regular.ttf", 16),
+    "small": ("RobotoCondensed-Regular.ttf", 12),
+    "badge": ("RobotoCondensed-Bold.ttf", 14),
 }
 
 
@@ -71,57 +70,57 @@ def render(data: dict, out_path: Path) -> None:
     img = Image.new("RGB", (WIDTH, HEIGHT), WHITE)
     draw = ImageDraw.Draw(img)
 
-    margin = 28
+    margin = 16
     y = margin
 
     # Title
     draw.text((margin, y), data.get("room_name", ""), fill=BLACK, font=fonts["title"])
-    y += 58
+    y += 42
 
-    # Availability badge
+    # Availability badge (B&W: filled black for IN USE, outlined for AVAILABLE)
     available = bool(data.get("available", True))
     label = "AVAILABLE" if available else "IN USE"
     bx0, by0 = margin, y
-    pad_x, pad_y = 12, 6
+    pad_x, pad_y = 8, 4
     text_w = int(draw.textlength(label, font=fonts["badge"]))
     bx1 = bx0 + text_w + pad_x * 2
-    by1 = by0 + 32
+    by1 = by0 + 22
     if available:
         draw.rectangle((bx0, by0, bx1, by1), outline=BLACK, width=2)
-        draw.text((bx0 + pad_x, by0 + pad_y - 2), label, fill=BLACK, font=fonts["badge"])
+        draw.text((bx0 + pad_x, by0 + pad_y - 1), label, fill=BLACK, font=fonts["badge"])
     else:
-        draw.rectangle((bx0, by0, bx1, by1), fill=RED, outline=RED, width=2)
-        draw.text((bx0 + pad_x, by0 + pad_y - 2), label, fill=WHITE, font=fonts["badge"])
-    y = by1 + 18
+        draw.rectangle((bx0, by0, bx1, by1), fill=BLACK, outline=BLACK, width=2)
+        draw.text((bx0 + pad_x, by0 + pad_y - 1), label, fill=WHITE, font=fonts["badge"])
+    y = by1 + 12
 
     # Schedule
     lines = data.get("schedule_display") or []
     if not lines:
         draw.text((margin, y), "No meetings scheduled", fill=MUTED, font=fonts["body"])
-        y += 34
+        y += 24
     else:
-        for line in lines[:5]:
+        for line in lines[:4]:
             draw.text((margin, y), line, fill=BLACK, font=fonts["body"])
-            y += 34
+            y += 24
 
     # Divider
-    y += 8
+    y += 6
     draw.line((margin, y, WIDTH - margin, y), fill=BLACK, width=1)
-    y += 16
+    y += 10
 
     # Joke
     joke_q = data.get("joke_q", "")
     joke_a = data.get("joke_a", "")
     if joke_q:
         draw.text((margin, y), f"Q: {joke_q}", fill=BLACK, font=fonts["mono"])
-        y += 32
+        y += 20
     if joke_a:
         draw.text((margin, y), f"A: {joke_a}", fill=BLACK, font=fonts["mono"])
-        y += 32
+        y += 20
 
     # Footer
-    footer_y = HEIGHT - margin - 20
-    draw.line((margin, footer_y - 8, WIDTH - margin, footer_y - 8), fill=MUTED, width=1)
+    footer_y = HEIGHT - margin - 14
+    draw.line((margin, footer_y - 6, WIDTH - margin, footer_y - 6), fill=MUTED, width=1)
     updated = data.get("last_updated") or "not pushed yet"
     draw.text((margin, footer_y), updated, fill=MUTED, font=fonts["small"])
     brand = "doorplate-diy"

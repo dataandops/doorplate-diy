@@ -32,7 +32,7 @@ def test_render_produces_valid_png(tmp_path):
     from PIL import Image
 
     with Image.open(out) as img:
-        assert img.size == (648, 480)
+        assert img.size == (400, 300)
         assert img.mode == "RGB"
 
 
