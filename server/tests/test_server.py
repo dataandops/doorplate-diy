@@ -305,3 +305,145 @@ def test_schedule_without_source_renders_plain(client):
     client.post("/update", json={"schedule": [{"time": "09:00", "title": "Standup"}]})
     data = client.get("/status").get_json()
     assert data["schedule_display"] == ["09:00  Standup"]
+
+
+# ---------- ICS sync integration ----------
+
+
+def test_source_accepts_ics_url(client):
+    payload = {
+        "sources": {
+            "work": {
+                "label": "Work",
+                "accent": "#0091ea",
+                "short": "W",
+                "ics_url": "https://example.test/w.ics",
+            }
+        }
+    }
+    data = client.post("/update", json=payload).get_json()
+    assert data["sources"]["work"]["ics_url"] == "https://example.test/w.ics"
+
+
+def test_source_rejects_bad_ics_url(client):
+    payload = {
+        "sources": {
+            "work": {
+                "label": "Work",
+                "accent": "#0091ea",
+                "short": "W",
+                "ics_url": "javascript:alert(1)",
+            }
+        }
+    }
+    assert client.post("/update", json=payload).status_code == 400
+
+
+def test_merged_schedule_sorts_manual_and_synced(client, monkeypatch):
+    # Seed manual schedule + inject synced items directly into state.
+    import server as srv
+
+    client.post("/update", json={"schedule": [{"time": "14:00", "title": "Deep work"}]})
+    # Write synced entries directly via the same file path.
+    state = srv._load_state()
+    state["sources"] = {
+        "work": {"label": "Work", "accent": "#0091ea", "short": "W", "ics_url": "https://x/w"},
+    }
+    state["synced_schedule"] = {
+        "work": [
+            {"time": "09:00", "title": "Standup", "source": "work", "synced": True},
+            {"time": "11:30", "title": "Review", "source": "work", "synced": True},
+        ]
+    }
+    srv._save_state(state)
+
+    data = client.get("/status").get_json()
+    times = [r["time"] for r in data["schedule"]]
+    assert times == ["09:00", "11:30", "14:00"]
+
+
+def test_schedule_write_drops_synced_items(client):
+    """Client echoing synced items back on POST shouldn't duplicate them as manual rows."""
+    client.post(
+        "/update",
+        json={
+            "schedule": [
+                {"time": "09:00", "title": "Standup", "synced": True, "source": "work"},
+                {"time": "14:00", "title": "Manual"},
+            ],
+            "sources": {
+                "work": {"label": "Work", "accent": "#0091ea", "short": "W"},
+            },
+        },
+    )
+    import server as srv
+
+    saved = srv._load_state()
+    # Only the manual row survives in state["schedule"]
+    assert saved["schedule"] == [{"time": "14:00", "title": "Manual"}]
+
+
+def test_sources_refresh_endpoint_triggers_poll(client, monkeypatch):
+    import ics_sync as ics
+
+    # Pre-seed a source with ICS URL
+    client.post(
+        "/update",
+        json={
+            "sources": {
+                "work": {
+                    "label": "Work",
+                    "accent": "#0091ea",
+                    "short": "W",
+                    "ics_url": "https://example.test/w.ics",
+                }
+            }
+        },
+    )
+
+    # Mock the fetch to return empty calendar (valid, just no events)
+    monkeypatch.setattr(
+        ics,
+        "fetch_ics",
+        lambda url, timeout=15: b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nEND:VCALENDAR\r\n",
+    )
+
+    res = client.post("/sources/refresh")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["sources"]["work"]["last_synced"] is not None
+    assert data["sources"]["work"]["last_sync_error"] is None
+
+
+def test_sources_refresh_requires_auth(auth_client):
+    res = auth_client.post("/sources/refresh")
+    assert res.status_code == 401
+
+
+def test_source_removal_clears_synced_schedule(client):
+    client.post(
+        "/update",
+        json={
+            "sources": {
+                "work": {
+                    "label": "Work",
+                    "accent": "#0091ea",
+                    "short": "W",
+                    "ics_url": "https://x/w",
+                }
+            }
+        },
+    )
+    # Inject a synced entry
+    import server as srv
+
+    state = srv._load_state()
+    state["synced_schedule"] = {
+        "work": [{"time": "09:00", "title": "X", "source": "work", "synced": True}]
+    }
+    srv._save_state(state)
+
+    # Remove the source via /update
+    client.post("/update", json={"sources": {}})
+    saved = srv._load_state()
+    assert saved["synced_schedule"] == {}

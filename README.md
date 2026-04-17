@@ -195,14 +195,34 @@ In the control panel, expand **Calendar sources**, add a source with:
 - **Short** (1–2 chars) — shown as a prefix on the e-ink (`W· 09:00 Standup`)
 - **Label** — human-readable name
 - **Accent** — colour chip shown in the placard preview
+- **ICS URL** *(optional)* — any iCal feed URL to auto-populate today's events
 
 Then pick a source from each schedule row's dropdown. Unsourced rows
-render as plain text.
+render as plain text. When a source has an ICS URL, the server polls it
+every 10 minutes (default) and merges today's events into the schedule.
+Synced rows show a "synced" badge in the editor and can't be edited
+directly — remove the ICS URL to take manual ownership.
 
-> **Auto-populating from a calendar app** is on the roadmap — see
-> [`docs/roadmap-current.md`](docs/roadmap-current.md). For now, rows are
-> entered manually (or via `POST /update`). ICS subscription support is the
-> next PR.
+### Where to get an ICS URL
+
+- **Google Calendar** → Settings → *Integrate calendar* → *Secret address in iCal format*
+- **Apple Calendar** → right-click the calendar → *Share Calendar* → *Public Calendar* → copy URL
+- **Outlook.com** → Settings → *Shared calendars* → *Publish a calendar* → ICS link
+- **Calendly / Notion / Linear** → search their settings for "ICS" or "iCal feed"
+
+### Enable sync
+
+Set `DOORPLATE_ICS_SYNC=1` so the background worker runs. Default `make dev`
+already sets this. Override the polling interval with `DOORPLATE_ICS_POLL_INTERVAL`
+(seconds, default 600). Hit the **Refresh now** button in the control panel
+to trigger an immediate poll.
+
+### Limits
+
+- All-day events are skipped (no `HH:MM` to display)
+- Events without `SUMMARY` are skipped
+- Recurring events are expanded via `recurring-ical-events` (RRULE / EXDATE supported)
+- One poll pass is sequential over all sources; a slow/dead URL delays the whole pass
 
 ## Auth
 

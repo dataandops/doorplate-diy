@@ -53,12 +53,21 @@
     .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--ink); padding: 6px 10px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; border-radius: var(--radius); }
     .btn-ghost:hover { background: var(--ink); color: var(--paper); }
 
-    .source-row { display: grid; grid-template-columns: 44px 1fr 48px auto; gap: 6px; margin-bottom: 8px; align-items: center; }
+    .source-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 8px; background: var(--paper); }
+    .source-row { display: grid; grid-template-columns: 44px 1fr 48px auto; gap: 6px; align-items: center; }
     .source-row input { padding: 8px 10px; font-size: 14px; }
+    .source-ics { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 6px; }
+    .source-ics input { padding: 6px 8px; font-size: 12px; font-family: var(--font-mono); }
+    .source-status { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .source-status.error { color: var(--accent); }
+    .source-status.ok::before { content: "\2713  "; }
     details.sources { border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper-elevated); padding: 10px 12px; }
     details.sources > summary { font-family: var(--font-mono); font-size: 12px; cursor: pointer; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 0; }
     details.sources[open] > summary { margin-bottom: 10px; }
+    .sources-actions { display: flex; gap: 8px; margin-top: 10px; }
     .custom-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .schedule-row.synced input, .schedule-row.synced select { opacity: 0.7; }
+    .synced-badge { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); border-radius: 2px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
 
     .btn-primary {
       width: 100%; padding: 16px; margin-top: 12px;
@@ -173,7 +182,10 @@
         <details class="sources">
           <summary>Manage sources</summary>
           <div id="source-rows"></div>
-          <button id="btn-add-source" class="btn-ghost" type="button">+ Add source</button>
+          <div class="sources-actions">
+            <button id="btn-add-source" class="btn-ghost" type="button">+ Add source</button>
+            <button id="btn-refresh-sources" class="btn-ghost" type="button">↻ Refresh now</button>
+          </div>
         </details>
       </div>
 
@@ -301,6 +313,9 @@
       const container = document.getElementById("source-rows");
       container.replaceChildren();
       for (const [key, cfg] of Object.entries(state.sources)) {
+        const block = document.createElement("div");
+        block.className = "source-block";
+
         const row = document.createElement("div");
         row.className = "source-row";
 
@@ -338,8 +353,6 @@
         removeBtn.textContent = "×";
         removeBtn.addEventListener("click", () => {
           delete state.sources[key];
-          // Orphan schedule items keep their source key; server will reject
-          // on push unless we strip it. Strip preemptively to match server validation.
           state.schedule.forEach(r => { if (r.source === key) delete r.source; });
           renderSourceRows();
           renderScheduleRows();
@@ -347,7 +360,60 @@
         });
 
         row.append(shortInput, labelInput, colorInput, removeBtn);
-        container.appendChild(row);
+        block.appendChild(row);
+
+        // ICS URL row
+        const icsWrap = document.createElement("div");
+        icsWrap.className = "source-ics";
+        const icsInput = document.createElement("input");
+        icsInput.type = "url";
+        icsInput.value = cfg.ics_url || "";
+        icsInput.placeholder = "https://calendar.google.com/calendar/ical/.../basic.ics (optional)";
+        icsInput.addEventListener("input", (e) => {
+          state.sources[key].ics_url = e.target.value.trim();
+        });
+        icsWrap.appendChild(icsInput);
+        block.appendChild(icsWrap);
+
+        // Status indicator
+        if (cfg.ics_url) {
+          const status = document.createElement("div");
+          status.className = "source-status";
+          if (cfg.last_sync_error) {
+            status.classList.add("error");
+            status.textContent = `Sync error: ${cfg.last_sync_error}`;
+          } else if (cfg.last_synced) {
+            status.classList.add("ok");
+            status.textContent = `Last synced ${cfg.last_synced}`;
+          } else {
+            status.textContent = "Not synced yet — push config, then hit Refresh now.";
+          }
+          block.appendChild(status);
+        }
+
+        container.appendChild(block);
+      }
+    }
+
+    async function refreshSources() {
+      const btn = document.getElementById("btn-refresh-sources");
+      btn.disabled = true;
+      btn.textContent = "Refreshing…";
+      try {
+        const headers = {};
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/sources/refresh`, { method: "POST", headers });
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        Object.assign(state, data);
+        render();
+        toast("Sources refreshed");
+      } catch (err) {
+        toast(`Refresh failed: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "↻ Refresh now";
       }
     }
 
@@ -379,10 +445,13 @@
       state.schedule.forEach((row, i) => {
         const el = document.createElement("div");
         el.className = "schedule-row";
+        const isSynced = row.synced === true;
+        if (isSynced) el.classList.add("synced");
 
         const timeInput = document.createElement("input");
         timeInput.type = "time";
         timeInput.value = row.time || "";
+        timeInput.disabled = isSynced;
         timeInput.addEventListener("input", (e) => {
           state.schedule[i].time = e.target.value;
           renderPlacard();
@@ -392,39 +461,51 @@
         titleInput.type = "text";
         titleInput.placeholder = "Meeting title";
         titleInput.value = row.title || "";
+        titleInput.disabled = isSynced;
         titleInput.addEventListener("input", (e) => {
           state.schedule[i].title = e.target.value;
           renderPlacard();
         });
 
-        const sourceSelect = document.createElement("select");
-        const noneOpt = document.createElement("option");
-        noneOpt.value = ""; noneOpt.textContent = "No source";
-        sourceSelect.appendChild(noneOpt);
-        for (const key of sourceKeys) {
-          const opt = document.createElement("option");
-          opt.value = key;
-          opt.textContent = state.sources[key].label || key;
-          if (row.source === key) opt.selected = true;
-          sourceSelect.appendChild(opt);
+        let sourceCell;
+        if (isSynced) {
+          sourceCell = document.createElement("span");
+          sourceCell.className = "synced-badge";
+          sourceCell.textContent = "synced";
+          sourceCell.title = `Pulled from ${state.sources[row.source]?.label || row.source}`;
+        } else {
+          sourceCell = document.createElement("select");
+          const noneOpt = document.createElement("option");
+          noneOpt.value = ""; noneOpt.textContent = "No source";
+          sourceCell.appendChild(noneOpt);
+          for (const key of sourceKeys) {
+            const opt = document.createElement("option");
+            opt.value = key;
+            opt.textContent = state.sources[key].label || key;
+            if (row.source === key) opt.selected = true;
+            sourceCell.appendChild(opt);
+          }
+          sourceCell.addEventListener("change", (e) => {
+            if (e.target.value) state.schedule[i].source = e.target.value;
+            else delete state.schedule[i].source;
+            renderPlacard();
+          });
         }
-        sourceSelect.addEventListener("change", (e) => {
-          if (e.target.value) state.schedule[i].source = e.target.value;
-          else delete state.schedule[i].source;
-          renderPlacard();
-        });
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
         removeBtn.className = "btn-ghost";
         removeBtn.textContent = "×";
-        removeBtn.addEventListener("click", () => {
-          state.schedule.splice(i, 1);
-          renderScheduleRows();
-          renderPlacard();
-        });
+        removeBtn.disabled = isSynced;
+        if (!isSynced) {
+          removeBtn.addEventListener("click", () => {
+            state.schedule.splice(i, 1);
+            renderScheduleRows();
+            renderPlacard();
+          });
+        }
 
-        el.append(timeInput, titleInput, sourceSelect, removeBtn);
+        el.append(timeInput, titleInput, sourceCell, removeBtn);
         container.appendChild(el);
       });
     }
@@ -500,11 +581,14 @@
     }
 
     function buildPushBody(extra = {}) {
-      // Build the schedule payload: filter orphaned sources.
+      // Build the schedule payload: filter orphaned sources. Synced items
+      // are echoed back with synced:true so the server can drop them —
+      // the worker is the source of truth for those.
       const allowed = new Set(Object.keys(state.sources));
       const schedule = state.schedule.map(r => {
         const out = { time: r.time || "", title: r.title || "" };
         if (r.source && allowed.has(r.source)) out.source = r.source;
+        if (r.synced === true) out.synced = true;
         return out;
       });
       return {
@@ -589,6 +673,7 @@
       // Server formats time_display on push; for now preview just shows last value.
     });
     document.getElementById("btn-add-source").addEventListener("click", () => addSource());
+    document.getElementById("btn-refresh-sources").addEventListener("click", () => refreshSources());
     document.getElementById("btn-add-row").addEventListener("click", () => {
       state.schedule.push({ time: "", title: "" });
       renderScheduleRows();

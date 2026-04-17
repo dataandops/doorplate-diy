@@ -38,18 +38,15 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
   busy + animated modes.
 - **Configurable time format** — done / S
   Footer rendering: Relative / 24h / 12h / ISO / Off. Rendered server-side.
-- **Calendar sources (Stage 1)** — done / M
-  Central source catalog (`{label, accent, short}`). Schedule rows reference
-  a source and render a colour chip in the browser / letter prefix on e-ink.
-  Manual entry only; automated sync is next.
+- **Calendar sources + ICS sync** — done / L
+  Central source catalog (`{label, accent, short, ics_url}`). Schedule rows
+  reference a source and render a colour chip in the browser / letter prefix
+  on e-ink. When a source has an ICS URL, a background worker polls every
+  10 min and auto-populates today's events. Works with Google, Apple,
+  Outlook, Calendly, Notion — anything that exports iCal. No OAuth.
 
 ## Next — committed, not yet built
 
-- **ICS calendar subscriptions** — speccing / L
-  Sources get an optional `ics_url`. Background worker on the server polls
-  each URL every N minutes, parses events, populates today's schedule.
-  Works with Google, Apple, Outlook, Calendly, Notion, anything that
-  exports ICS. No OAuth required.
 - **Multiple signs from one server** — idea / M
   Key each sign by `room_id`; `/status/<room_id>` and `/update/<room_id>`.
   Control panel grows a room selector. ESPHome substitutes `room_id` into

@@ -5,6 +5,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+import ics_sync
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
@@ -80,7 +81,8 @@ SOURCE_SHORT_MAX = 2
 DEFAULT_STATE = {
     "room_name": "Meeting Room",
     "available": True,
-    "schedule": [],
+    "schedule": [],  # manually-entered rows only
+    "synced_schedule": {},  # keyed by source: [{time, title, source, synced:True}]
     "joke_index": 0,
     "last_updated": None,
     "mode": "meeting_room",
@@ -197,6 +199,22 @@ def _format_schedule_display(schedule: list, sources: dict) -> list:
     return lines
 
 
+def _merged_schedule(state: dict) -> list[dict]:
+    """Manual rows + synced rows from all sources, sorted by time."""
+    manual = list(state.get("schedule") or [])
+    synced_by_source = state.get("synced_schedule") or {}
+    merged = list(manual)
+    for events in synced_by_source.values():
+        merged.extend(events)
+
+    def sort_key(row):
+        t = str(row.get("time") or "")
+        return (not t, t)
+
+    merged.sort(key=sort_key)
+    return merged
+
+
 def _public_state(state: dict) -> dict:
     joke_q, joke_a = JOKES[state["joke_index"] % len(JOKES)]
     free, busy, animation, accent = _resolve_mode(state)
@@ -206,11 +224,12 @@ def _public_state(state: dict) -> dict:
     status_animation = animation if (not available and animation != "none") else "none"
     sources = state.get("sources") or {}
     time_format = state.get("time_format") or "relative"
+    merged = _merged_schedule(state)
     return {
         "room_name": state["room_name"],
         "available": available,
-        "schedule": state["schedule"],
-        "schedule_display": _format_schedule_display(state["schedule"], sources),
+        "schedule": merged,
+        "schedule_display": _format_schedule_display(merged, sources),
         "joke_q": joke_q,
         "joke_a": joke_a,
         "last_updated": state["last_updated"],
@@ -237,9 +256,15 @@ def _check_auth() -> bool:
     return provided == expected
 
 
-def _validate_sources(value):
+def _validate_sources(value, existing: dict | None = None):
+    """Validate an incoming sources payload.
+
+    Preserves server-managed fields (`last_synced`, `last_sync_error`) from
+    `existing` so a round-trip through the control panel doesn't wipe them.
+    """
     if not isinstance(value, dict):
         return None, "sources must be an object"
+    existing = existing or {}
     out = {}
     for key, cfg in value.items():
         if not isinstance(key, str) or not SOURCE_KEY_RE.match(key):
@@ -249,13 +274,32 @@ def _validate_sources(value):
         label = cfg.get("label", "")
         accent = cfg.get("accent", "")
         short = cfg.get("short", "")
+        ics_url = cfg.get("ics_url", "") or ""
         if not isinstance(label, str) or not label.strip() or len(label) > SOURCE_LABEL_MAX:
             return None, f"source {key!r}: label must be 1-{SOURCE_LABEL_MAX} chars"
         if not isinstance(accent, str) or not HEX_COLOR_RE.match(accent):
             return None, f"source {key!r}: accent must be #RRGGBB hex"
         if not isinstance(short, str) or not (1 <= len(short.strip()) <= SOURCE_SHORT_MAX):
             return None, f"source {key!r}: short must be 1-{SOURCE_SHORT_MAX} chars"
-        out[key] = {"label": label, "accent": accent.lower(), "short": short.strip()}
+        if not isinstance(ics_url, str):
+            return None, f"source {key!r}: ics_url must be a string"
+        ics_url = ics_url.strip()
+        if ics_url and not (ics_url.startswith("http://") or ics_url.startswith("https://")):
+            return None, f"source {key!r}: ics_url must start with http(s)://"
+
+        prev = existing.get(key) or {}
+        entry = {
+            "label": label,
+            "accent": accent.lower(),
+            "short": short.strip(),
+            "ics_url": ics_url,
+            # Preserve server-written fields so the round-trip doesn't drop them.
+            "last_synced": prev.get("last_synced") if ics_url == prev.get("ics_url", "") else None,
+            "last_sync_error": (
+                prev.get("last_sync_error") if ics_url == prev.get("ics_url", "") else None
+            ),
+        }
+        out[key] = entry
     return out, None
 
 
@@ -278,6 +322,18 @@ def create_app() -> Flask:
             return jsonify([])
         names = sorted(p.stem for p in themes_dir.glob("*.css"))
         return jsonify(names)
+
+    @app.post("/sources/refresh")
+    def sources_refresh():
+        """Trigger an immediate ICS poll for all configured sources.
+
+        Auth-gated same as /update.
+        """
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        worker = ics_sync.SyncWorker(_load_state, _save_state)
+        worker.poll_once()
+        return jsonify(_public_state(_load_state()))
 
     @app.post("/update")
     def update():
@@ -325,10 +381,16 @@ def create_app() -> Flask:
             state["time_format"] = tf
 
         if "sources" in payload:
-            sources, err = _validate_sources(payload["sources"])
+            sources, err = _validate_sources(payload["sources"], existing=state.get("sources"))
             if err:
                 return jsonify({"error": err}), 400
             state["sources"] = sources
+            # Drop synced schedules for sources that were removed or lost ics_url.
+            synced = state.get("synced_schedule") or {}
+            for key in list(synced):
+                if key not in sources or not sources[key].get("ics_url"):
+                    synced.pop(key, None)
+            state["synced_schedule"] = synced
 
         if "schedule" in payload:
             schedule = payload["schedule"]
@@ -339,6 +401,10 @@ def create_app() -> Flask:
             for row in schedule:
                 if not isinstance(row, dict) or "time" not in row or "title" not in row:
                     return jsonify({"error": "schedule rows must have 'time' and 'title'"}), 400
+                # Synced rows are worker-owned; the client echoes them back but
+                # they're not part of the manual schedule.
+                if row.get("synced") is True:
+                    continue
                 item = {"time": row["time"], "title": row["title"]}
                 source = row.get("source")
                 if source is not None:
@@ -361,6 +427,23 @@ def create_app() -> Flask:
 
 
 app = create_app()
+
+
+def _maybe_start_sync_worker() -> ics_sync.SyncWorker | None:
+    """Start the ICS sync worker if DOORPLATE_ICS_SYNC=1.
+
+    Guarded by env var so tests (which import this module) don't spawn
+    background threads. Set in docker-compose.yml and `make dev` for prod use.
+    """
+    if os.environ.get("DOORPLATE_ICS_SYNC", "").strip() not in ("1", "true", "on"):
+        return None
+    interval = int(os.environ.get("DOORPLATE_ICS_POLL_INTERVAL", ics_sync.DEFAULT_POLL_INTERVAL))
+    worker = ics_sync.SyncWorker(_load_state, _save_state, interval=interval)
+    worker.start()
+    return worker
+
+
+sync_worker = _maybe_start_sync_worker()
 
 
 if __name__ == "__main__":

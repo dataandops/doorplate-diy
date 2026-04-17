@@ -12,3 +12,7 @@ services:
       # Set to require X-Doorplate-Token on POST /update.
       # Leave blank (or unset) for permissive LAN use.
       DOORPLATE_TOKEN: "${DOORPLATE_TOKEN:-}"
+      # Enable the ICS subscription worker (polls each source's ics_url).
+      DOORPLATE_ICS_SYNC: "1"
+      # Seconds between polls (default 600 = 10 min).
+      DOORPLATE_ICS_POLL_INTERVAL: "${DOORPLATE_ICS_POLL_INTERVAL:-600}"

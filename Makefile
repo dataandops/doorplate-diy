@@ -26,7 +26,7 @@ preview:
 	python server/render_preview.py
 
 dev:
-	python server/server.py
+	DOORPLATE_ICS_SYNC=1 python server/server.py
 
 ci: lint test html-check esphome-validate
 
