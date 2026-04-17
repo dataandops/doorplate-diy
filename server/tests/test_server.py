@@ -84,7 +84,53 @@ def test_schedule_round_trip(client):
 
     data = client.get("/status").get_json()
     assert data["schedule"] == payload["schedule"]
+    # Default time_format is relative → schedule uses 24h
     assert data["schedule_display"] == ["09:00  Standup", "10:30  Design"]
+
+
+def test_schedule_display_12h_formats_times(client):
+    client.post(
+        "/update",
+        json={
+            "time_format": "12h",
+            "schedule": [
+                {"time": "09:00", "title": "Morning"},
+                {"time": "14:30", "title": "Afternoon"},
+                {"time": "00:15", "title": "Midnight-ish"},
+            ],
+        },
+    )
+    data = client.get("/status").get_json()
+    assert data["schedule_display"] == [
+        "12:15 AM  Midnight-ish",
+        "9:00 AM  Morning",
+        "2:30 PM  Afternoon",
+    ]
+
+
+def test_schedule_display_24h_stays_hhmm(client):
+    client.post(
+        "/update",
+        json={
+            "time_format": "24h",
+            "schedule": [{"time": "14:30", "title": "Afternoon"}],
+        },
+    )
+    data = client.get("/status").get_json()
+    assert data["schedule_display"] == ["14:30  Afternoon"]
+
+
+def test_schedule_display_relative_keeps_24h_for_meetings(client):
+    """Relative / iso / off only affect the footer; meetings stay 24h."""
+    client.post(
+        "/update",
+        json={
+            "time_format": "relative",
+            "schedule": [{"time": "14:30", "title": "Afternoon"}],
+        },
+    )
+    data = client.get("/status").get_json()
+    assert data["schedule_display"] == ["14:30  Afternoon"]
 
 
 def test_persistence_across_restart(tmp_path, monkeypatch):

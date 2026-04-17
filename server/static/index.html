@@ -113,7 +113,7 @@
     @keyframes badge-scan  { 0% { transform: translateY(-100%) } 100% { transform: translateY(100%) } }
 
     .placard .schedule { display: flex; flex-direction: column; gap: 4px; font-size: 18px; }
-    .placard .schedule-line { display: grid; grid-template-columns: auto 70px 1fr; gap: 8px; align-items: center; }
+    .placard .schedule-line { display: grid; grid-template-columns: auto auto 1fr; gap: 12px; align-items: center; }
     .placard .schedule-empty { color: #7a7a7a; font-style: italic; font-size: 15px; }
     .placard .divider { border-top: 1px solid #0a0a0a; margin: 6px 0; }
     .placard .joke { font-family: "DM Mono", monospace; font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 4px; }
@@ -285,9 +285,18 @@
     }
 
     // ---------- time format ----------
-    // Mirrors server-side _format_time so the preview updates instantly
-    // when the dropdown changes. Server still renders the canonical
-    // time_display on Push — we just fill in locally until then.
+    // Mirrors server-side _format_time and _format_schedule_time so the
+    // preview updates instantly when the dropdown changes. Server still
+    // renders the canonical values on Push — we just fill in locally until then.
+    function formatScheduleTimeClient(hhmm, fmt) {
+      if (!hhmm || fmt !== "12h" || !hhmm.includes(":")) return hhmm || "";
+      const [hh, mm] = hhmm.split(":");
+      const h = parseInt(hh, 10);
+      if (isNaN(h)) return hhmm;
+      const h12 = ((h + 11) % 12) + 1;
+      return `${h12}:${mm} ${h < 12 ? "AM" : "PM"}`;
+    }
+
     function formatTimeClient(isoStr, fmt, now) {
       now = now || new Date();
       if (fmt === "off") return "";
@@ -660,7 +669,7 @@
           }
 
           const timeSpan = document.createElement("span");
-          timeSpan.textContent = row.time || "";
+          timeSpan.textContent = formatScheduleTimeClient(row.time || "", state.time_format || "24h");
           const titleSpan = document.createElement("span");
           titleSpan.textContent = row.title || "";
           line.append(chipSlot, timeSpan, titleSpan);

@@ -181,10 +181,28 @@ def _format_time(iso_str: str | None, fmt: str, now: datetime | None = None) -> 
     return local.strftime("%I:%M %p").lstrip("0")
 
 
-def _format_schedule_display(schedule: list, sources: dict) -> list:
+def _format_schedule_time(time_hhmm: str, fmt: str) -> str:
+    """Format a `HH:MM` string per time_format. 12h → `9:00 AM`.
+
+    Only 12h actually alters the output; 24h/relative/iso/off all keep the
+    underlying `HH:MM` (relative/iso/off don't make sense for future meetings,
+    so we default to 24h for them).
+    """
+    if fmt != "12h" or not time_hhmm or ":" not in time_hhmm:
+        return time_hhmm
+    try:
+        hh, mm = time_hhmm.split(":", 1)
+        h = int(hh)
+    except ValueError:
+        return time_hhmm
+    h12 = ((h + 11) % 12) + 1
+    return f"{h12}:{mm} {'AM' if h < 12 else 'PM'}"
+
+
+def _format_schedule_display(schedule: list, sources: dict, time_format: str = "24h") -> list:
     lines = []
     for row in schedule:
-        time = str(row.get("time", "")).strip()
+        time = _format_schedule_time(str(row.get("time", "")).strip(), time_format)
         title = str(row.get("title", "")).strip()
         source_key = row.get("source")
         prefix = ""
@@ -231,7 +249,7 @@ def _public_state(state: dict) -> dict:
         "room_name": state["room_name"],
         "available": available,
         "schedule": merged,
-        "schedule_display": _format_schedule_display(merged, sources),
+        "schedule_display": _format_schedule_display(merged, sources, time_format),
         "joke_q": joke_q,
         "joke_a": joke_a,
         "last_updated": state["last_updated"],
