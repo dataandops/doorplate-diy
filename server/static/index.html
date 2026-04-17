@@ -70,6 +70,7 @@
     details.sources[open] > summary { margin-bottom: 10px; }
     .sources-actions { display: flex; gap: 8px; margin-top: 10px; }
     .custom-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .field-hint { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
     .schedule-row.synced input, .schedule-row.synced select { opacity: 0.7; }
     .synced-badge { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); border-radius: 2px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
 
@@ -179,6 +180,7 @@
           <option value="iso">ISO timestamp</option>
           <option value="off">Off (hide)</option>
         </select>
+        <div class="field-hint">Preview updates instantly. The physical sign picks up changes on its next wake (every 15 min by default).</div>
       </div>
 
       <div class="field">
@@ -280,6 +282,39 @@
 
     function applyTheme(name) {
       document.getElementById("theme-css").href = `/static/themes/${name}.css`;
+    }
+
+    // ---------- time format ----------
+    // Mirrors server-side _format_time so the preview updates instantly
+    // when the dropdown changes. Server still renders the canonical
+    // time_display on Push — we just fill in locally until then.
+    function formatTimeClient(isoStr, fmt, now) {
+      now = now || new Date();
+      if (fmt === "off") return "";
+      if (!isoStr) return "not pushed yet";
+      const dt = new Date(isoStr);
+      if (isNaN(dt.getTime())) return isoStr;
+      if (fmt === "iso") return isoStr;
+      if (fmt === "24h") {
+        return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+      }
+      if (fmt === "12h") {
+        const h = dt.getHours();
+        const h12 = ((h + 11) % 12) + 1;
+        const m = String(dt.getMinutes()).padStart(2, "0");
+        return `${h12}:${m} ${h < 12 ? "AM" : "PM"}`;
+      }
+      // relative
+      const sec = Math.floor((now - dt) / 1000);
+      if (sec < 45) return "just now";
+      if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))} min ago`;
+      if (sec < 86400) return `${Math.max(1, Math.round(sec / 3600))} h ago`;
+      const days = Math.floor(sec / 86400);
+      if (days <= 7) return days === 1 ? "1 day ago" : `${days} days ago`;
+      const h = dt.getHours();
+      const h12 = ((h + 11) % 12) + 1;
+      const m = String(dt.getMinutes()).padStart(2, "0");
+      return `${h12}:${m} ${h < 12 ? "AM" : "PM"}`;
     }
 
     // ---------- mode ↔ labels ----------
@@ -635,7 +670,12 @@
 
       document.getElementById("pl-joke-q").textContent = state.joke_q || "";
       document.getElementById("pl-joke-a").textContent = state.joke_a || "";
-      document.getElementById("pl-updated").textContent = state.time_display || "";
+      // Compute locally from current state so the preview reflects dropdown
+      // changes immediately, without requiring a push round-trip.
+      document.getElementById("pl-updated").textContent = formatTimeClient(
+        state.last_updated,
+        state.time_format || "relative"
+      );
     }
 
     function renderJokeCard() {
@@ -741,7 +781,7 @@
     });
     document.getElementById("time-format").addEventListener("change", (e) => {
       state.time_format = e.target.value;
-      // Server formats time_display on push; for now preview just shows last value.
+      renderPlacard();
     });
     document.getElementById("btn-add-source").addEventListener("click", () => addSource());
     document.getElementById("btn-refresh-sources").addEventListener("click", () => refreshSources());
