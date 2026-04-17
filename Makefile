@@ -9,12 +9,12 @@ test:
 	pytest server/tests
 
 lint:
-	ruff check server/
-	black --check server/
+	ruff check server/ scripts/
+	black --check server/ scripts/
 
 format:
-	black server/
-	ruff check --fix server/
+	black server/ scripts/
+	ruff check --fix server/ scripts/
 
 html-check:
 	html5validator --root server/static --ignore 'Property "aspect-ratio"'

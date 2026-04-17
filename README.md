@@ -217,6 +217,31 @@ already sets this. Override the polling interval with `DOORPLATE_ICS_POLL_INTERV
 (seconds, default 600). Hit the **Refresh now** button in the control panel
 to trigger an immediate poll.
 
+### Testing locally without a real calendar
+
+Use the `scripts/make_ics.py` helper to generate fake ICS feeds and serve
+them from a simple local file server:
+
+```bash
+# in one terminal — serve /tmp over HTTP
+cd /tmp && python3 -m http.server 5556
+
+# in another — generate an ICS with today's events
+echo '{"name":"work","events":[
+  {"time":"09:00","title":"Standup"},
+  {"time":"14:00","title":"Design review"}
+]}' | python3 scripts/make_ics.py
+# → http://localhost:5556/work.ics
+```
+
+Point a source at that URL in the control panel, hit **Test**, and you
+have an end-to-end sync loop with zero Google in the picture. Useful
+for debugging, demos, and iterating on source-chip UI without fighting
+calendar propagation delays.
+
+Event fields: `time` (`HH:MM`), `title`, optional `duration_min` (default 30),
+optional `date` (ISO, default today).
+
 ### Troubleshooting
 
 **Before saving a source**, hit **Test** next to the ICS URL field. The
