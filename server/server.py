@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,26 +31,81 @@ JOKES = [
     ("What do you call a sleeping bull?", "A bulldozer."),
 ]
 
+MODES = {
+    "meeting_room": {
+        "label": "Meeting Room",
+        "free": "AVAILABLE",
+        "busy": "IN USE",
+        "animation": "none",
+        "accent": "#c4342a",
+    },
+    "studio": {
+        "label": "Studio",
+        "free": "OFF AIR",
+        "busy": "ON AIR",
+        "animation": "pulse",
+        "accent": "#e60000",
+    },
+    "lab": {
+        "label": "Lab",
+        "free": "IDLE",
+        "busy": "EXPERIMENT RUNNING",
+        "animation": "scanline",
+        "accent": "#0091ea",
+    },
+    "focus": {
+        "label": "Focus",
+        "free": "OPEN",
+        "busy": "DO NOT DISTURB",
+        "animation": "blink",
+        "accent": "#ff6f00",
+    },
+    "custom": {
+        "label": "Custom",
+        "free": None,
+        "busy": None,
+        "animation": "none",
+        "accent": "#c4342a",
+    },
+}
+
+TIME_FORMATS = ("relative", "24h", "12h", "iso", "off")
+
+SOURCE_KEY_RE = re.compile(r"^[a-z0-9_-]{1,16}$")
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+CUSTOM_LABEL_MAX = 24
+SOURCE_LABEL_MAX = 32
+SOURCE_SHORT_MAX = 2
+
 DEFAULT_STATE = {
     "room_name": "Meeting Room",
     "available": True,
     "schedule": [],
     "joke_index": 0,
     "last_updated": None,
+    "mode": "meeting_room",
+    "custom_labels": {"free": "AVAILABLE", "busy": "IN USE"},
+    "time_format": "relative",
+    "sources": {},
 }
 
 
 def _load_state() -> dict:
     if not DATA_FILE.exists():
-        return dict(DEFAULT_STATE)
+        return _fresh_state()
     try:
         with open(DATA_FILE, encoding="utf-8") as f:
             loaded = json.load(f)
     except (json.JSONDecodeError, OSError):
-        return dict(DEFAULT_STATE)
-    merged = dict(DEFAULT_STATE)
+        return _fresh_state()
+    merged = _fresh_state()
     merged.update(loaded)
     return merged
+
+
+def _fresh_state() -> dict:
+    # Deep copy so nested dicts (custom_labels, sources) don't get shared.
+    return json.loads(json.dumps(DEFAULT_STATE))
 
 
 def _save_state(state: dict) -> None:
@@ -65,30 +121,111 @@ def _save_state(state: dict) -> None:
         raise
 
 
-def _format_schedule_display(schedule: list) -> list:
+def _resolve_mode(state: dict) -> tuple[str, str, str, str]:
+    mode_key = state.get("mode") or "meeting_room"
+    mode = MODES.get(mode_key) or MODES["meeting_room"]
+    if mode_key == "custom":
+        cl = state.get("custom_labels") or {}
+        free = (cl.get("free") or "AVAILABLE").strip() or "AVAILABLE"
+        busy = (cl.get("busy") or "IN USE").strip() or "IN USE"
+    else:
+        free = mode["free"]
+        busy = mode["busy"]
+    return free, busy, mode["animation"], mode["accent"]
+
+
+def _format_time(iso_str: str | None, fmt: str, now: datetime | None = None) -> str:
+    if fmt == "off":
+        return ""
+    if not iso_str:
+        return "not pushed yet"
+    try:
+        dt = datetime.fromisoformat(iso_str)
+    except ValueError:
+        return iso_str
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+
+    if fmt == "iso":
+        return iso_str
+
+    local = dt.astimezone()
+    if fmt == "24h":
+        return local.strftime("%H:%M")
+    if fmt == "12h":
+        return local.strftime("%I:%M %p").lstrip("0")
+
+    # relative (default)
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    delta = now - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 0:
+        return "just now"
+    if seconds < 45:
+        return "just now"
+    if seconds < 3600:
+        mins = max(1, round(seconds / 60))
+        return f"{mins} min ago"
+    if seconds < 86400:
+        hours = max(1, round(seconds / 3600))
+        return f"{hours} h ago"
+    days = seconds // 86400
+    if days <= 7:
+        return f"{days} day ago" if days == 1 else f"{days} days ago"
+    return local.strftime("%I:%M %p").lstrip("0")
+
+
+def _format_schedule_display(schedule: list, sources: dict) -> list:
     lines = []
     for row in schedule:
         time = str(row.get("time", "")).strip()
         title = str(row.get("title", "")).strip()
+        source_key = row.get("source")
+        prefix = ""
+        if isinstance(source_key, str) and source_key in sources:
+            short = str(sources[source_key].get("short", "")).strip()
+            if short:
+                prefix = f"{short}· "
         if time and title:
-            lines.append(f"{time}  {title}")
+            lines.append(f"{prefix}{time}  {title}")
         elif title:
-            lines.append(title)
+            lines.append(f"{prefix}{title}")
         elif time:
-            lines.append(time)
+            lines.append(f"{prefix}{time}")
     return lines
 
 
 def _public_state(state: dict) -> dict:
     joke_q, joke_a = JOKES[state["joke_index"] % len(JOKES)]
+    free, busy, animation, accent = _resolve_mode(state)
+    available = bool(state["available"])
+    status_label = free if available else busy
+    # Animation only applies in busy state (visual cue for attention).
+    status_animation = animation if (not available and animation != "none") else "none"
+    sources = state.get("sources") or {}
+    time_format = state.get("time_format") or "relative"
     return {
         "room_name": state["room_name"],
-        "available": bool(state["available"]),
+        "available": available,
         "schedule": state["schedule"],
-        "schedule_display": _format_schedule_display(state["schedule"]),
+        "schedule_display": _format_schedule_display(state["schedule"], sources),
         "joke_q": joke_q,
         "joke_a": joke_a,
         "last_updated": state["last_updated"],
+        "status_label": status_label,
+        "status_animation": status_animation,
+        "status_accent": accent,
+        "mode": state.get("mode") or "meeting_room",
+        "modes": [
+            {"key": k, "label": v["label"], "free": v["free"], "busy": v["busy"]}
+            for k, v in MODES.items()
+        ],
+        "custom_labels": state.get("custom_labels") or dict(DEFAULT_STATE["custom_labels"]),
+        "time_format": time_format,
+        "time_display": _format_time(state["last_updated"], time_format),
+        "sources": sources,
     }
 
 
@@ -98,6 +235,28 @@ def _check_auth() -> bool:
         return True
     provided = request.headers.get("X-Doorplate-Token", "")
     return provided == expected
+
+
+def _validate_sources(value):
+    if not isinstance(value, dict):
+        return None, "sources must be an object"
+    out = {}
+    for key, cfg in value.items():
+        if not isinstance(key, str) or not SOURCE_KEY_RE.match(key):
+            return None, f"source key {key!r} must match [a-z0-9_-]{{1,16}}"
+        if not isinstance(cfg, dict):
+            return None, f"source {key!r} must be an object"
+        label = cfg.get("label", "")
+        accent = cfg.get("accent", "")
+        short = cfg.get("short", "")
+        if not isinstance(label, str) or not label.strip() or len(label) > SOURCE_LABEL_MAX:
+            return None, f"source {key!r}: label must be 1-{SOURCE_LABEL_MAX} chars"
+        if not isinstance(accent, str) or not HEX_COLOR_RE.match(accent):
+            return None, f"source {key!r}: accent must be #RRGGBB hex"
+        if not isinstance(short, str) or not (1 <= len(short.strip()) <= SOURCE_SHORT_MAX):
+            return None, f"source {key!r}: short must be 1-{SOURCE_SHORT_MAX} chars"
+        out[key] = {"label": label, "accent": accent.lower(), "short": short.strip()}
+    return out, None
 
 
 def create_app() -> Flask:
@@ -140,14 +299,56 @@ def create_app() -> Flask:
                 return jsonify({"error": "available must be a boolean"}), 400
             state["available"] = available
 
+        if "mode" in payload:
+            mode = payload["mode"]
+            if not isinstance(mode, str) or mode not in MODES:
+                return jsonify({"error": f"mode must be one of {list(MODES)}"}), 400
+            state["mode"] = mode
+
+        if "custom_labels" in payload:
+            cl = payload["custom_labels"]
+            if not isinstance(cl, dict):
+                return jsonify({"error": "custom_labels must be an object"}), 400
+            for k in ("free", "busy"):
+                v = cl.get(k, "")
+                if not isinstance(v, str) or not v.strip() or len(v) > CUSTOM_LABEL_MAX:
+                    return (
+                        jsonify({"error": f"custom_labels.{k} must be 1-{CUSTOM_LABEL_MAX} chars"}),
+                        400,
+                    )
+            state["custom_labels"] = {"free": cl["free"], "busy": cl["busy"]}
+
+        if "time_format" in payload:
+            tf = payload["time_format"]
+            if not isinstance(tf, str) or tf not in TIME_FORMATS:
+                return jsonify({"error": f"time_format must be one of {list(TIME_FORMATS)}"}), 400
+            state["time_format"] = tf
+
+        if "sources" in payload:
+            sources, err = _validate_sources(payload["sources"])
+            if err:
+                return jsonify({"error": err}), 400
+            state["sources"] = sources
+
         if "schedule" in payload:
             schedule = payload["schedule"]
             if not isinstance(schedule, list):
                 return jsonify({"error": "schedule must be a list"}), 400
+            allowed_sources = set(state.get("sources") or {})
+            cleaned = []
             for row in schedule:
                 if not isinstance(row, dict) or "time" not in row or "title" not in row:
                     return jsonify({"error": "schedule rows must have 'time' and 'title'"}), 400
-            state["schedule"] = schedule
+                item = {"time": row["time"], "title": row["title"]}
+                source = row.get("source")
+                if source is not None:
+                    if not isinstance(source, str):
+                        return jsonify({"error": "schedule.source must be a string"}), 400
+                    if source not in allowed_sources:
+                        return jsonify({"error": f"unknown source {source!r}"}), 400
+                    item["source"] = source
+                cleaned.append(item)
+            state["schedule"] = cleaned
 
         if payload.get("new_joke"):
             state["joke_index"] = (state["joke_index"] + 1) % len(JOKES)

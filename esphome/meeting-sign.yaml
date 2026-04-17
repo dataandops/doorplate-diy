@@ -40,6 +40,9 @@ esphome:
                     id(joke_q) = root["joke_q"] | "";
                     id(joke_a) = root["joke_a"] | "";
                     id(last_updated) = root["last_updated"] | "";
+                    id(status_label) = root["status_label"] | (id(available) ? "AVAILABLE" : "IN USE");
+                    id(status_animation) = root["status_animation"] | "none";
+                    id(time_display) = root["time_display"] | "";
 
                     std::string lines;
                     if (root["schedule_display"].is<JsonArray>()) {
@@ -54,6 +57,17 @@ esphome:
                     return true;
                   });
       - component.update: eink
+      # Crude 2-frame flash for animated busy modes (ON AIR, etc.) — one extra
+      # full refresh (~1.5 s) when the sign is busy and the mode has animation.
+      - if:
+          condition:
+            lambda: 'return !id(available) && id(status_animation) != "none";'
+          then:
+            - lambda: 'id(status_animation_flash) = true;'
+            - component.update: eink
+            - delay: 600ms
+            - lambda: 'id(status_animation_flash) = false;'
+            - component.update: eink
       - delay: 2s
       - deep_sleep.enter: deep_sleep_1
 
@@ -118,6 +132,22 @@ globals:
     type: std::string
     restore_value: no
     initial_value: '""'
+  - id: status_label
+    type: std::string
+    restore_value: no
+    initial_value: '"AVAILABLE"'
+  - id: status_animation
+    type: std::string
+    restore_value: no
+    initial_value: '"none"'
+  - id: status_animation_flash
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: time_display
+    type: std::string
+    restore_value: no
+    initial_value: '""'
 
 font:
   - file: "fonts/RobotoCondensed-Bold.ttf"
@@ -158,19 +188,24 @@ display:
       y += 42;
 
       // Availability badge — width computed from text to match render_preview.py.
-      // B&W panel: filled black box for IN USE, outlined box for AVAILABLE.
-      const char *label = id(available) ? "AVAILABLE" : "IN USE";
+      // B&W panel: filled black box for busy, outlined for free. When the
+      // status_animation_flash global is set (during the 2-frame animation),
+      // invert the fill so the badge visibly "blinks" on refresh.
+      const std::string &label_str = id(status_label);
+      const char *label = label_str.c_str();
       const int badge_pad_x = 8;
       const int badge_h = 22;
       int tx, ty, tw, th;
       it.get_text_bounds(0, 0, label, id(font_badge), TextAlign::TOP_LEFT, &tx, &ty, &tw, &th);
       int badge_w = tw + badge_pad_x * 2;
-      if (id(available)) {
-        it.rectangle(margin, y, badge_w, badge_h);
-        it.printf(margin + badge_pad_x, y + 3, id(font_badge), "%s", label);
-      } else {
+      bool filled = !id(available);
+      if (id(status_animation_flash)) filled = !filled;
+      if (filled) {
         it.filled_rectangle(margin, y, badge_w, badge_h);
         it.printf(margin + badge_pad_x, y + 3, id(font_badge), COLOR_OFF, "%s", label);
+      } else {
+        it.rectangle(margin, y, badge_w, badge_h);
+        it.printf(margin + badge_pad_x, y + 3, id(font_badge), "%s", label);
       }
       y += badge_h + 12;
 
@@ -212,6 +247,8 @@ display:
       int footer_y = H - margin - 14;
       it.line(margin, footer_y - 6, W - margin, footer_y - 6);
       it.printf(margin, footer_y, id(font_small), "%s",
-                id(last_updated).empty() ? "not pushed yet" : id(last_updated).c_str());
+                id(time_display).empty()
+                  ? (id(last_updated).empty() ? "not pushed yet" : id(last_updated).c_str())
+                  : id(time_display).c_str());
       it.printf(W - margin, footer_y, id(font_small), TextAlign::TOP_RIGHT, "doorplate-diy");
 

@@ -154,6 +154,56 @@ Closing the terminal kills the Flask server. Two ways to keep it alive:
 For casual use, `tmux new -s doorplate 'make dev'` or `caffeinate -i make dev`
 works fine too.
 
+## Modes
+
+The sign ships with five presets, picked from the control panel **Mode**
+dropdown:
+
+| Mode         | Free label | Busy label             | Animation (busy only) | Accent     |
+| ------------ | ---------- | ---------------------- | --------------------- | ---------- |
+| Meeting Room | AVAILABLE  | IN USE                 | none                  | red        |
+| Studio       | OFF AIR    | ON AIR                 | pulse                 | bright red |
+| Lab          | IDLE       | EXPERIMENT RUNNING     | scanline              | blue       |
+| Focus        | OPEN       | DO NOT DISTURB         | blink                 | orange     |
+| Custom       | *(your text)* | *(your text)*       | none                  | red        |
+
+Animations play on the control-panel placard preview in real time. On the
+e-ink panel, an animated busy mode triggers a 2-frame flash on every wake
+(~1.5 s extra refresh, ~every 15 min by default). The e-ink is B&W, so
+animation is a visual blink, not color.
+
+## Time display
+
+Footer format configurable via the control panel **Time format** dropdown:
+
+| Format   | Example          | Notes |
+| -------- | ---------------- | ----- |
+| Relative | `3 min ago`      | Default. Updates each refresh. |
+| 24-hour  | `17:08`          | Local time of the Mac running the server. |
+| 12-hour  | `5:08 PM`        | Local time. |
+| ISO      | `2026-04-17T17:08:00+00:00` | Raw UTC timestamp. |
+| Off      | *(blank)*        | Hides the footer timestamp. |
+
+Formatted server-side, so the e-ink and browser always agree.
+
+## Calendar sources
+
+Attach a **source** to each schedule row to colour-code where it came from.
+Useful when you pull from multiple calendars (Work, Personal, Client, Oncall).
+
+In the control panel, expand **Calendar sources**, add a source with:
+- **Short** (1–2 chars) — shown as a prefix on the e-ink (`W· 09:00 Standup`)
+- **Label** — human-readable name
+- **Accent** — colour chip shown in the placard preview
+
+Then pick a source from each schedule row's dropdown. Unsourced rows
+render as plain text.
+
+> **Auto-populating from a calendar app** is on the roadmap — see
+> [`docs/roadmap-current.md`](docs/roadmap-current.md). For now, rows are
+> entered manually (or via `POST /update`). ICS subscription support is the
+> next PR.
+
 ## Auth
 
 By default, `POST /update` accepts anything on the LAN — fine for a trusted
