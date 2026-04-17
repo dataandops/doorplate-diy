@@ -37,8 +37,8 @@ jobs:
         run: |
           cat > esphome/secrets.yaml <<'EOF'
           wifi_ssid: "ci-stub"
-          wifi_password: "ci-stub"
-          ota_password: "ci-stub"
+          wifi_password: "ci-stub-pass"
+          ota_password: "ci-stub-pass"
           EOF
 
       - name: Lint (ruff + black)
