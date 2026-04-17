@@ -495,6 +495,91 @@ def test_sources_test_endpoint_requires_auth(auth_client):
     assert res.status_code == 401
 
 
+def test_ics_publish_and_serve(client):
+    payload = {
+        "cal_name": "Work",
+        "events": [
+            {"time": "09:00", "title": "Standup", "duration_min": 15},
+            {"time": "14:00", "title": "Design review"},
+        ],
+    }
+    res = client.post("/ics/work", json=payload)
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["event_count"] == 2
+    assert data["url"].endswith("/ics/work.ics")
+
+    # GET serves the same body back
+    res = client.get("/ics/work.ics")
+    assert res.status_code == 200
+    assert res.headers["Content-Type"].startswith("text/calendar")
+    body = res.get_data(as_text=True)
+    assert "BEGIN:VCALENDAR" in body
+    assert "SUMMARY:Standup" in body
+    assert "SUMMARY:Design review" in body
+
+
+def test_ics_publish_validates_name(client):
+    res = client.post("/ics/bad name", json={"events": []})
+    assert res.status_code == 400
+
+
+def test_ics_publish_validates_events(client):
+    res = client.post("/ics/work", json={"events": "not a list"})
+    assert res.status_code == 400
+
+    res = client.post("/ics/work", json={"events": [{"time": "09:00"}]})
+    assert res.status_code == 400
+
+
+def test_ics_serve_404_for_unknown(client):
+    assert client.get("/ics/does-not-exist.ics").status_code == 404
+
+
+def test_ics_list_returns_published_names(client):
+    client.post("/ics/alpha", json={"events": [{"time": "09:00", "title": "A"}]})
+    client.post("/ics/beta", json={"events": [{"time": "10:00", "title": "B"}]})
+    res = client.get("/ics")
+    assert res.status_code == 200
+    names = res.get_json()
+    assert "alpha" in names and "beta" in names
+
+
+def test_ics_delete_removes_feed(client):
+    client.post("/ics/gamma", json={"events": [{"time": "09:00", "title": "G"}]})
+    assert client.get("/ics/gamma.ics").status_code == 200
+    res = client.delete("/ics/gamma")
+    assert res.status_code == 200
+    assert client.get("/ics/gamma.ics").status_code == 404
+
+
+def test_ics_publish_requires_auth(auth_client):
+    res = auth_client.post("/ics/work", json={"events": []})
+    assert res.status_code == 401
+
+
+def test_ics_publish_feed_is_parseable_by_our_sync(client):
+    """The feed we publish should be consumable by our own ICS sync path —
+    closes the loop for dev/demo flows."""
+    import ics_sync
+
+    client.post(
+        "/ics/sample",
+        json={
+            "events": [
+                {"time": "09:00", "title": "Sample event"},
+                {"time": "13:00", "title": "Another", "duration_min": 60},
+            ]
+        },
+    )
+    body = client.get("/ics/sample.ics").get_data()
+    events = ics_sync.parse_events_today(body)
+    titles = [e["title"] for e in events]
+    assert "Sample event" in titles
+    assert "Another" in titles
+
+
 def test_source_removal_clears_synced_schedule(client):
     client.post(
         "/update",

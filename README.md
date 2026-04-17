@@ -219,25 +219,39 @@ to trigger an immediate poll.
 
 ### Testing locally without a real calendar
 
-Use the `scripts/make_ics.py` helper to generate fake ICS feeds and serve
-them from a simple local file server:
+The doorplate server can also **serve its own ICS feeds** for dev/demo.
+Point a source at your own server and you never touch Google / Apple /
+Outlook:
 
 ```bash
-# in one terminal — serve /tmp over HTTP
-cd /tmp && python3 -m http.server 5556
-
-# in another — generate an ICS with today's events
 echo '{"name":"work","events":[
   {"time":"09:00","title":"Standup"},
   {"time":"14:00","title":"Design review"}
-]}' | python3 scripts/make_ics.py
-# → http://localhost:5556/work.ics
+]}' | python3 scripts/make_ics.py --publish
+# → http://localhost:5000/ics/work.ics
 ```
 
-Point a source at that URL in the control panel, hit **Test**, and you
-have an end-to-end sync loop with zero Google in the picture. Useful
-for debugging, demos, and iterating on source-chip UI without fighting
-calendar propagation delays.
+Copy that URL into the control panel's **ICS URL** field, hit **Test**,
+and you have an end-to-end sync loop. Rerun the command anytime to update
+the feed; hit **↻ Refresh now** in the UI to pick up changes.
+
+Other endpoints the server exposes for feed management:
+
+| Method / Path          | What it does                                      |
+| ---------------------- | ------------------------------------------------- |
+| `POST /ics/<name>`     | Publish events: `{events: [...], cal_name: "..."}`|
+| `GET  /ics/<name>.ics` | Serve the feed back as `text/calendar`            |
+| `GET  /ics`            | List published feed names                         |
+| `DELETE /ics/<name>`   | Remove a feed                                     |
+
+All mutating endpoints are auth-gated (same `DOORPLATE_TOKEN` as `/update`).
+Feeds live in `DOORPLATE_DATA_DIR/ics/` — gitignored, volume-mounted in
+Docker, safe to delete.
+
+**Fallback mode**: if you'd rather publish via a static file + `http.server`,
+drop `--publish` and the script writes `/tmp/<name>.ics` instead. Useful if
+you want to point multiple environments at the same feed, or serve from a
+different machine.
 
 Event fields: `time` (`HH:MM`), `title`, optional `duration_min` (default 30),
 optional `date` (ISO, default today).
