@@ -122,16 +122,19 @@ display:
       it.printf(margin, y, id(font_title), "%s", id(room_name).c_str());
       y += 58;
 
-      // Availability badge
+      // Availability badge — width computed from text to match render_preview.py.
       const char *label = id(available) ? "AVAILABLE" : "IN USE";
-      int badge_w = 160;
-      int badge_h = 32;
+      const int badge_pad_x = 12;
+      const int badge_h = 32;
+      int tx, ty, tw, th;
+      it.get_text_bounds(0, 0, label, id(font_badge), TextAlign::TOP_LEFT, &tx, &ty, &tw, &th);
+      int badge_w = tw + badge_pad_x * 2;
       if (id(available)) {
         it.rectangle(margin, y, badge_w, badge_h);
-        it.printf(margin + 12, y + 4, id(font_badge), "%s", label);
+        it.printf(margin + badge_pad_x, y + 4, id(font_badge), "%s", label);
       } else {
         it.filled_rectangle(margin, y, badge_w, badge_h, id(color_red));
-        it.printf(margin + 12, y + 4, id(font_badge), COLOR_OFF, id(color_red), "%s", label);
+        it.printf(margin + badge_pad_x, y + 4, id(font_badge), COLOR_OFF, id(color_red), "%s", label);
       }
       y += badge_h + 18;
 

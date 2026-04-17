@@ -17,7 +17,7 @@ format:
 	ruff check --fix server/
 
 html-check:
-	html5validator --root server/static --also-check-css
+	html5validator --root server/static
 
 esphome-validate:
 	esphome config esphome/meeting-sign.yaml

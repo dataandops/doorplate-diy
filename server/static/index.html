@@ -206,32 +206,40 @@
 
     function renderScheduleRows() {
       const container = document.getElementById("schedule-rows");
-      container.innerHTML = "";
+      container.replaceChildren();
       state.schedule.forEach((row, i) => {
         const el = document.createElement("div");
         el.className = "schedule-row";
-        el.innerHTML = `
-          <input type="time" value="${row.time || ""}" data-i="${i}" data-field="time">
-          <input type="text" placeholder="Meeting title" value="${(row.title || "").replace(/"/g, "&quot;")}" data-i="${i}" data-field="title">
-          <button class="btn-ghost" data-remove="${i}" type="button">×</button>
-        `;
-        container.appendChild(el);
-      });
-      container.querySelectorAll("input").forEach(inp => {
-        inp.addEventListener("input", (e) => {
-          const i = +e.target.dataset.i;
-          const field = e.target.dataset.field;
-          state.schedule[i][field] = e.target.value;
+
+        const timeInput = document.createElement("input");
+        timeInput.type = "time";
+        timeInput.value = row.time || "";
+        timeInput.addEventListener("input", (e) => {
+          state.schedule[i].time = e.target.value;
           renderPlacard();
         });
-      });
-      container.querySelectorAll("button[data-remove]").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-          const i = +e.target.dataset.remove;
+
+        const titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.placeholder = "Meeting title";
+        titleInput.value = row.title || "";
+        titleInput.addEventListener("input", (e) => {
+          state.schedule[i].title = e.target.value;
+          renderPlacard();
+        });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn-ghost";
+        removeBtn.textContent = "×";
+        removeBtn.addEventListener("click", () => {
           state.schedule.splice(i, 1);
           renderScheduleRows();
           renderPlacard();
         });
+
+        el.append(timeInput, titleInput, removeBtn);
+        container.appendChild(el);
       });
     }
 
@@ -242,7 +250,7 @@
       badge.classList.toggle("in-use", !state.available);
 
       const sched = document.getElementById("pl-schedule");
-      sched.innerHTML = "";
+      sched.replaceChildren();
       const lines = state.schedule.filter(r => (r.time && r.time.trim()) || (r.title && r.title.trim()));
       if (!lines.length) {
         const empty = document.createElement("div");
@@ -253,7 +261,11 @@
         lines.slice(0, 5).forEach(row => {
           const line = document.createElement("div");
           line.className = "schedule-line";
-          line.innerHTML = `<span>${row.time || ""}</span><span>${row.title || ""}</span>`;
+          const timeSpan = document.createElement("span");
+          timeSpan.textContent = row.time || "";
+          const titleSpan = document.createElement("span");
+          titleSpan.textContent = row.title || "";
+          line.append(timeSpan, titleSpan);
           sched.appendChild(line);
         });
       }
