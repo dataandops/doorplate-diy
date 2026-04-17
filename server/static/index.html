@@ -58,9 +58,13 @@
     .source-row input { padding: 8px 10px; font-size: 14px; }
     .source-ics { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 6px; }
     .source-ics input { padding: 6px 8px; font-size: 12px; font-family: var(--font-mono); }
-    .source-status { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .source-status { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
     .source-status.error { color: var(--accent); }
     .source-status.ok::before { content: "\2713  "; }
+    .source-test-result { margin-top: 6px; padding: 8px 10px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 11px; line-height: 1.4; }
+    .source-test-result.ok { background: var(--muted-bg); border-left: 3px solid #2e7d32; }
+    .source-test-result.error { background: var(--muted-bg); border-left: 3px solid var(--accent); color: var(--ink); }
+    .source-test-result ul { margin: 4px 0 0; padding-left: 18px; }
     details.sources { border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper-elevated); padding: 10px 12px; }
     details.sources > summary { font-family: var(--font-mono); font-size: 12px; cursor: pointer; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 0; }
     details.sources[open] > summary { margin-bottom: 10px; }
@@ -362,20 +366,26 @@
         row.append(shortInput, labelInput, colorInput, removeBtn);
         block.appendChild(row);
 
-        // ICS URL row
+        // ICS URL row + Test button
         const icsWrap = document.createElement("div");
         icsWrap.className = "source-ics";
         const icsInput = document.createElement("input");
         icsInput.type = "url";
         icsInput.value = cfg.ics_url || "";
-        icsInput.placeholder = "https://calendar.google.com/calendar/ical/.../basic.ics (optional)";
+        icsInput.placeholder = "https:// or webcal:// (optional)";
         icsInput.addEventListener("input", (e) => {
           state.sources[key].ics_url = e.target.value.trim();
         });
-        icsWrap.appendChild(icsInput);
+        const testBtn = document.createElement("button");
+        testBtn.type = "button";
+        testBtn.className = "btn-ghost";
+        testBtn.textContent = "Test";
+        testBtn.title = "Probe this URL without saving";
+        testBtn.addEventListener("click", () => testSourceUrl(key, block));
+        icsWrap.append(icsInput, testBtn);
         block.appendChild(icsWrap);
 
-        // Status indicator
+        // Status indicator (from last background poll)
         if (cfg.ics_url) {
           const status = document.createElement("div");
           status.className = "source-status";
@@ -386,12 +396,73 @@
             status.classList.add("ok");
             status.textContent = `Last synced ${cfg.last_synced}`;
           } else {
-            status.textContent = "Not synced yet — push config, then hit Refresh now.";
+            status.textContent = "Not synced yet — Test the URL above, or push config and hit Refresh now.";
           }
           block.appendChild(status);
         }
 
+        // Placeholder for test results
+        const testSlot = document.createElement("div");
+        testSlot.className = "source-test-slot";
+        block.appendChild(testSlot);
+
         container.appendChild(block);
+      }
+    }
+
+    async function testSourceUrl(key, block) {
+      const url = (state.sources[key] && state.sources[key].ics_url || "").trim();
+      const slot = block.querySelector(".source-test-slot");
+      slot.replaceChildren();
+      if (!url) {
+        const box = document.createElement("div");
+        box.className = "source-test-result error";
+        box.textContent = "Enter a URL first.";
+        slot.appendChild(box);
+        return;
+      }
+      const pending = document.createElement("div");
+      pending.className = "source-test-result";
+      pending.textContent = "Testing…";
+      slot.appendChild(pending);
+      try {
+        const headers = { "Content-Type": "application/json" };
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/sources/test`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        slot.replaceChildren();
+        const box = document.createElement("div");
+        box.className = `source-test-result ${data.ok ? "ok" : "error"}`;
+        if (data.ok) {
+          const header = document.createElement("div");
+          header.textContent = data.event_count === 0
+            ? "Connection OK — no events today."
+            : `Connection OK — ${data.event_count} event${data.event_count === 1 ? "" : "s"} today:`;
+          box.appendChild(header);
+          if (data.events && data.events.length) {
+            const ul = document.createElement("ul");
+            for (const ev of data.events) {
+              const li = document.createElement("li");
+              li.textContent = `${ev.time}  ${ev.title}`;
+              ul.appendChild(li);
+            }
+            box.appendChild(ul);
+          }
+        } else {
+          box.textContent = data.error || "Unknown error.";
+        }
+        slot.appendChild(box);
+      } catch (err) {
+        slot.replaceChildren();
+        const box = document.createElement("div");
+        box.className = "source-test-result error";
+        box.textContent = `Request failed: ${err.message}`;
+        slot.appendChild(box);
       }
     }
 

@@ -284,8 +284,13 @@ def _validate_sources(value, existing: dict | None = None):
         if not isinstance(ics_url, str):
             return None, f"source {key!r}: ics_url must be a string"
         ics_url = ics_url.strip()
-        if ics_url and not (ics_url.startswith("http://") or ics_url.startswith("https://")):
-            return None, f"source {key!r}: ics_url must start with http(s)://"
+        if ics_url and not (
+            ics_url.startswith("http://")
+            or ics_url.startswith("https://")
+            or ics_url.startswith("webcal://")
+            or ics_url.startswith("webcals://")
+        ):
+            return None, f"source {key!r}: ics_url must start with http(s):// or webcal://"
 
         prev = existing.get(key) or {}
         entry = {
@@ -334,6 +339,35 @@ def create_app() -> Flask:
         worker = ics_sync.SyncWorker(_load_state, _save_state)
         worker.poll_once()
         return jsonify(_public_state(_load_state()))
+
+    @app.post("/sources/test")
+    def sources_test():
+        """Synchronously probe an ICS URL and return events or a specific error.
+
+        Body: {"url": "..."}. No state is persisted.
+        Auth-gated. Does not require the source to exist yet — useful for
+        testing before saving.
+        """
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        payload = request.get_json(silent=True) or {}
+        url = payload.get("url", "")
+        if not isinstance(url, str) or not url.strip():
+            return jsonify({"ok": False, "error": "url is required"}), 400
+        url = ics_sync.normalize_url(url)
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return jsonify({"ok": False, "error": "URL must be http(s):// or webcal://"}), 400
+        events, error = ics_sync.sync_source("__probe__", url)
+        if error:
+            return jsonify({"ok": False, "error": error, "resolved_url": url}), 200
+        return jsonify(
+            {
+                "ok": True,
+                "event_count": len(events),
+                "events": events[:5],  # preview, cap for the UI
+                "resolved_url": url,
+            }
+        )
 
     @app.post("/update")
     def update():

@@ -217,6 +217,19 @@ already sets this. Override the polling interval with `DOORPLATE_ICS_POLL_INTERV
 (seconds, default 600). Hit the **Refresh now** button in the control panel
 to trigger an immediate poll.
 
+### Troubleshooting
+
+**Before saving a source**, hit **Test** next to the ICS URL field. The
+server probes the URL synchronously and shows either the first few events
+today or a specific error. Common errors:
+
+- `Server returned 404 — URL is wrong or the calendar's secret token was rotated` — go back to the calendar's settings and copy a fresh URL (for Google: *Settings → Integrate calendar → Secret address in iCal format*). Don't use the "Public address" unless your calendar is genuinely public.
+- `Server returned 403` — you grabbed an auth-required URL. Same fix as 404.
+- `Server returned an HTML page, not an ICS file` — the URL redirected to a login or consent page. You're using the wrong URL.
+- `Network error: ...` — DNS, firewall, or upstream is down.
+
+`webcal://` URLs are automatically converted to `https://` before fetching, so you can paste whichever format your calendar app gives you.
+
 ### Limits
 
 - All-day events are skipped (no `HH:MM` to display)
