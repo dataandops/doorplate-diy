@@ -353,12 +353,18 @@ or any 5×7" frame with ≥25 mm cavity depth behind the glass.
 
 ### Premium Kit — Waveshare 3.6" Spectra 6 color (~$60)
 
-| Part                                   | Est. cost | Link                                                                                      |
-| -------------------------------------- | --------: | ----------------------------------------------------------------------------------------- |
-| Waveshare 3.6" e-Paper (Spectra 6)     |    $42    | https://www.waveshare.com/3.6inch-e-paper-module-g.htm                                    |
-| Waveshare ESP32 Driver Board           |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
-| USB-C cable                            |     $3    | Any 6' USB-C charging cable                                                               |
-| IKEA RÖDALM 5×7" birch frame           |     $5    | https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/                         |
+| Part                                       | Est. cost | Link                                                                                      |
+| ------------------------------------------ | --------: | ----------------------------------------------------------------------------------------- |
+| Waveshare 3.6" e-Paper HAT+ (E, Spectra 6) |    $42    | https://www.waveshare.com/3.6inch-e-paper-hat-plus-e.htm                                  |
+| Waveshare ESP32 Driver Board               |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
+| USB-C cable                                |     $3    | Any 6' USB-C charging cable                                                               |
+| IKEA RÖDALM 5×7" birch frame               |     $5    | https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/                         |
+
+> **Driver board note:** the 3.6" Spectra 6 ships as a HAT+ form-factor
+> panel. It can be driven from our standard ESP32 Driver Board over raw
+> SPI, but the pin mapping differs from the Standard kit. Full wiring
+> for this combo is on the roadmap alongside ESPHome's `epaper_spi`
+> support for Spectra 6.
 
 ## Wiring
 
