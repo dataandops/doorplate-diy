@@ -61,6 +61,12 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
 
 ## Later — exploring
 
+- **Weather widget, alternating with jokes** — idea / S
+  Below the divider: rotate between the dad joke and a weather readout
+  (temp + condition + maybe tomorrow's forecast). Use `wttr.in` for
+  zero-auth fetch, or OpenWeatherMap for richer data with an API key.
+  Fits the whimsy-meets-utility vibe. Rotation controlled by a state
+  counter that flips each sign wake.
 - **Google Calendar OAuth** — idea / L
   For users who want richer data than ICS (attendees, response status,
   conference links). Requires OAuth flow + token refresh.

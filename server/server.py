@@ -12,7 +12,9 @@ from flask_cors import CORS
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("DOORPLATE_DATA_DIR", str(BASE_DIR)))
 DATA_FILE = DATA_DIR / "sign_data.json"
+ICS_DIR = DATA_DIR / "ics"
 STATIC_DIR = BASE_DIR / "static"
+PUBLISH_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 JOKES = [
     ("Why don't scientists trust atoms?", "Because they make up everything."),
@@ -179,10 +181,28 @@ def _format_time(iso_str: str | None, fmt: str, now: datetime | None = None) -> 
     return local.strftime("%I:%M %p").lstrip("0")
 
 
-def _format_schedule_display(schedule: list, sources: dict) -> list:
+def _format_schedule_time(time_hhmm: str, fmt: str) -> str:
+    """Format a `HH:MM` string per time_format. 12h → `9:00 AM`.
+
+    Only 12h actually alters the output; 24h/relative/iso/off all keep the
+    underlying `HH:MM` (relative/iso/off don't make sense for future meetings,
+    so we default to 24h for them).
+    """
+    if fmt != "12h" or not time_hhmm or ":" not in time_hhmm:
+        return time_hhmm
+    try:
+        hh, mm = time_hhmm.split(":", 1)
+        h = int(hh)
+    except ValueError:
+        return time_hhmm
+    h12 = ((h + 11) % 12) + 1
+    return f"{h12}:{mm} {'AM' if h < 12 else 'PM'}"
+
+
+def _format_schedule_display(schedule: list, sources: dict, time_format: str = "24h") -> list:
     lines = []
     for row in schedule:
-        time = str(row.get("time", "")).strip()
+        time = _format_schedule_time(str(row.get("time", "")).strip(), time_format)
         title = str(row.get("title", "")).strip()
         source_key = row.get("source")
         prefix = ""
@@ -229,7 +249,7 @@ def _public_state(state: dict) -> dict:
         "room_name": state["room_name"],
         "available": available,
         "schedule": merged,
-        "schedule_display": _format_schedule_display(merged, sources),
+        "schedule_display": _format_schedule_display(merged, sources, time_format),
         "joke_q": joke_q,
         "joke_a": joke_a,
         "last_updated": state["last_updated"],
@@ -246,6 +266,48 @@ def _public_state(state: dict) -> dict:
         "time_display": _format_time(state["last_updated"], time_format),
         "sources": sources,
     }
+
+
+def _build_ics_body(events: list[dict], cal_name: str) -> str:
+    """Serialize a list of {time, title, duration_min?, date?} into an ICS file body.
+
+    Used by POST /ics/<name>. Local / floating times so the parser treats them
+    as the server's timezone (matches the rest of doorplate's time handling).
+    """
+    import uuid
+    from datetime import timedelta
+
+    blocks = []
+    today = datetime.now().astimezone()
+    for row in events:
+        time_str = str(row.get("time", "")).strip()
+        title = str(row.get("title", "")).strip()
+        if not time_str or ":" not in time_str or not title:
+            continue
+        hh, mm = (int(p) for p in time_str.split(":"))
+        date_iso = row.get("date")
+        base = datetime.fromisoformat(date_iso).astimezone() if date_iso else today
+        start = base.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        duration = int(row.get("duration_min", 30))
+        end = start + timedelta(minutes=duration)
+        uid = row.get("uid") or f"{uuid.uuid4()}@doorplate-diy"
+        blocks.append(
+            "BEGIN:VEVENT\r\n"
+            f"UID:{uid}\r\n"
+            f"DTSTART:{start.strftime('%Y%m%dT%H%M%S')}\r\n"
+            f"DTEND:{end.strftime('%Y%m%dT%H%M%S')}\r\n"
+            f"SUMMARY:{title}\r\n"
+            "END:VEVENT"
+        )
+    body = "\r\n".join(blocks)
+    return (
+        "BEGIN:VCALENDAR\r\n"
+        "VERSION:2.0\r\n"
+        "PRODID:-//doorplate-diy//publish//EN\r\n"
+        f"X-WR-CALNAME:{cal_name}\r\n"
+        f"{body}\r\n"
+        "END:VCALENDAR\r\n"
+    )
 
 
 def _check_auth() -> bool:
@@ -339,6 +401,77 @@ def create_app() -> Flask:
         worker = ics_sync.SyncWorker(_load_state, _save_state)
         worker.poll_once()
         return jsonify(_public_state(_load_state()))
+
+    @app.post("/ics/<name>")
+    def ics_publish(name: str):
+        """Publish an ICS feed under <name> so sources can subscribe to it.
+
+        Body: {"events": [{"time": "HH:MM", "title": "...", ...}], "cal_name": "..."}.
+        Files land in DATA_DIR/ics/<name>.ics. Served by GET /ics/<name>.ics.
+
+        Intended for local/dev use: lets you point a source at
+        http://<this-server>/ics/<name>.ics and skip running a second HTTP
+        server for test ICS files. Auth-gated same as /update.
+        """
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        if not PUBLISH_NAME_RE.match(name):
+            return jsonify({"error": "name must match [a-z0-9_-]{1,32}"}), 400
+        payload = request.get_json(silent=True) or {}
+        events = payload.get("events", [])
+        if not isinstance(events, list):
+            return jsonify({"error": "events must be a list"}), 400
+        cal_name = payload.get("cal_name", name)
+
+        # Build ICS body with _build_ics_body (defined below). Validate rows
+        # on the way in so bogus payloads fail before we touch disk.
+        for row in events:
+            if not isinstance(row, dict) or "time" not in row or "title" not in row:
+                return jsonify({"error": "each event needs 'time' and 'title'"}), 400
+
+        body = _build_ics_body(events, cal_name)
+        ICS_DIR.mkdir(parents=True, exist_ok=True)
+        (ICS_DIR / f"{name}.ics").write_text(body, encoding="utf-8")
+        base = request.host_url.rstrip("/")
+        return jsonify(
+            {
+                "ok": True,
+                "name": name,
+                "event_count": len(events),
+                "url": f"{base}/ics/{name}.ics",
+            }
+        )
+
+    @app.get("/ics/<name>.ics")
+    def ics_serve(name: str):
+        if not PUBLISH_NAME_RE.match(name):
+            return "Not Found", 404
+        path = ICS_DIR / f"{name}.ics"
+        if not path.exists():
+            return "Not Found", 404
+        return (
+            path.read_text(encoding="utf-8"),
+            200,
+            {"Content-Type": "text/calendar; charset=utf-8"},
+        )
+
+    @app.get("/ics")
+    def ics_list():
+        if not ICS_DIR.is_dir():
+            return jsonify([])
+        names = sorted(p.stem for p in ICS_DIR.glob("*.ics"))
+        return jsonify(names)
+
+    @app.delete("/ics/<name>")
+    def ics_delete(name: str):
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        if not PUBLISH_NAME_RE.match(name):
+            return jsonify({"error": "not found"}), 404
+        path = ICS_DIR / f"{name}.ics"
+        if path.exists():
+            path.unlink()
+        return jsonify({"ok": True})
 
     @app.post("/sources/test")
     def sources_test():

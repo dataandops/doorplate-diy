@@ -13,6 +13,7 @@ import server as server_module  # noqa: E402
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setattr(server_module, "ICS_DIR", tmp_path / "ics")
     monkeypatch.delenv("DOORPLATE_TOKEN", raising=False)
     app = server_module.create_app()
     app.config["TESTING"] = True
@@ -23,6 +24,7 @@ def client(tmp_path, monkeypatch):
 @pytest.fixture
 def auth_client(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setattr(server_module, "ICS_DIR", tmp_path / "ics")
     monkeypatch.setenv("DOORPLATE_TOKEN", "s3cret")
     app = server_module.create_app()
     app.config["TESTING"] = True
@@ -82,7 +84,53 @@ def test_schedule_round_trip(client):
 
     data = client.get("/status").get_json()
     assert data["schedule"] == payload["schedule"]
+    # Default time_format is relative → schedule uses 24h
     assert data["schedule_display"] == ["09:00  Standup", "10:30  Design"]
+
+
+def test_schedule_display_12h_formats_times(client):
+    client.post(
+        "/update",
+        json={
+            "time_format": "12h",
+            "schedule": [
+                {"time": "09:00", "title": "Morning"},
+                {"time": "14:30", "title": "Afternoon"},
+                {"time": "00:15", "title": "Midnight-ish"},
+            ],
+        },
+    )
+    data = client.get("/status").get_json()
+    assert data["schedule_display"] == [
+        "12:15 AM  Midnight-ish",
+        "9:00 AM  Morning",
+        "2:30 PM  Afternoon",
+    ]
+
+
+def test_schedule_display_24h_stays_hhmm(client):
+    client.post(
+        "/update",
+        json={
+            "time_format": "24h",
+            "schedule": [{"time": "14:30", "title": "Afternoon"}],
+        },
+    )
+    data = client.get("/status").get_json()
+    assert data["schedule_display"] == ["14:30  Afternoon"]
+
+
+def test_schedule_display_relative_keeps_24h_for_meetings(client):
+    """Relative / iso / off only affect the footer; meetings stay 24h."""
+    client.post(
+        "/update",
+        json={
+            "time_format": "relative",
+            "schedule": [{"time": "14:30", "title": "Afternoon"}],
+        },
+    )
+    data = client.get("/status").get_json()
+    assert data["schedule_display"] == ["14:30  Afternoon"]
 
 
 def test_persistence_across_restart(tmp_path, monkeypatch):
@@ -493,6 +541,91 @@ def test_sources_test_endpoint_rejects_bad_scheme(client):
 def test_sources_test_endpoint_requires_auth(auth_client):
     res = auth_client.post("/sources/test", json={"url": "https://example.test/c.ics"})
     assert res.status_code == 401
+
+
+def test_ics_publish_and_serve(client):
+    payload = {
+        "cal_name": "Work",
+        "events": [
+            {"time": "09:00", "title": "Standup", "duration_min": 15},
+            {"time": "14:00", "title": "Design review"},
+        ],
+    }
+    res = client.post("/ics/work", json=payload)
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["event_count"] == 2
+    assert data["url"].endswith("/ics/work.ics")
+
+    # GET serves the same body back
+    res = client.get("/ics/work.ics")
+    assert res.status_code == 200
+    assert res.headers["Content-Type"].startswith("text/calendar")
+    body = res.get_data(as_text=True)
+    assert "BEGIN:VCALENDAR" in body
+    assert "SUMMARY:Standup" in body
+    assert "SUMMARY:Design review" in body
+
+
+def test_ics_publish_validates_name(client):
+    res = client.post("/ics/bad name", json={"events": []})
+    assert res.status_code == 400
+
+
+def test_ics_publish_validates_events(client):
+    res = client.post("/ics/work", json={"events": "not a list"})
+    assert res.status_code == 400
+
+    res = client.post("/ics/work", json={"events": [{"time": "09:00"}]})
+    assert res.status_code == 400
+
+
+def test_ics_serve_404_for_unknown(client):
+    assert client.get("/ics/does-not-exist.ics").status_code == 404
+
+
+def test_ics_list_returns_published_names(client):
+    client.post("/ics/alpha", json={"events": [{"time": "09:00", "title": "A"}]})
+    client.post("/ics/beta", json={"events": [{"time": "10:00", "title": "B"}]})
+    res = client.get("/ics")
+    assert res.status_code == 200
+    names = res.get_json()
+    assert "alpha" in names and "beta" in names
+
+
+def test_ics_delete_removes_feed(client):
+    client.post("/ics/gamma", json={"events": [{"time": "09:00", "title": "G"}]})
+    assert client.get("/ics/gamma.ics").status_code == 200
+    res = client.delete("/ics/gamma")
+    assert res.status_code == 200
+    assert client.get("/ics/gamma.ics").status_code == 404
+
+
+def test_ics_publish_requires_auth(auth_client):
+    res = auth_client.post("/ics/work", json={"events": []})
+    assert res.status_code == 401
+
+
+def test_ics_publish_feed_is_parseable_by_our_sync(client):
+    """The feed we publish should be consumable by our own ICS sync path —
+    closes the loop for dev/demo flows."""
+    import ics_sync
+
+    client.post(
+        "/ics/sample",
+        json={
+            "events": [
+                {"time": "09:00", "title": "Sample event"},
+                {"time": "13:00", "title": "Another", "duration_min": 60},
+            ]
+        },
+    )
+    body = client.get("/ics/sample.ics").get_data()
+    events = ics_sync.parse_events_today(body)
+    titles = [e["title"] for e in events]
+    assert "Sample event" in titles
+    assert "Another" in titles
 
 
 def test_source_removal_clears_synced_schedule(client):
