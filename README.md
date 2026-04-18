@@ -304,6 +304,48 @@ today or a specific error. Common errors:
 - Recurring events are expanded via `recurring-ical-events` (RRULE / EXDATE supported)
 - One poll pass is sequential over all sources; a slow/dead URL delays the whole pass
 
+## Multiple rooms
+
+One server instance can drive any number of signs. State is keyed by
+`room_id`, with a `default` room created on first run.
+
+**Control panel**: the top bar has a room selector and a `+ New room`
+button. Selecting a room updates the URL to `?room=<room_id>`; every
+form field below edits just that room.
+
+**API**:
+
+```bash
+# list rooms
+curl http://localhost:5000/rooms
+
+# create a new room (auth-gated if DOORPLATE_TOKEN is set)
+curl -X POST http://localhost:5000/rooms \
+  -H 'Content-Type: application/json' \
+  -d '{"room_id": "acorn", "room_name": "Acorn"}'
+
+# per-room status + update
+curl http://localhost:5000/status/acorn
+curl -X POST http://localhost:5000/update/acorn -d '{"available": false}'
+
+# delete
+curl -X DELETE http://localhost:5000/rooms/acorn
+```
+
+Legacy `/status` and `/update` still work — they're aliases for the
+`default` room, so existing single-room deploys keep working unchanged.
+
+**ESPHome**: flash each physical sign with its own `room_id` substitution.
+In `esphome/meeting-sign.yaml`:
+
+```yaml
+substitutions:
+  room_id: "acorn"   # unique per sign; must match [a-z0-9_-]{1,32}
+```
+
+A file written by an older single-room build is auto-migrated into
+`rooms["default"]` on first load — no manual steps.
+
 ## Auth
 
 By default, `POST /update` accepts anything on the LAN — fine for a trusted

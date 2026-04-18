@@ -7,6 +7,10 @@ substitutions:
   # static lease or substitute a raw IP.
   server_host: "your-mac.local"
   server_port: "5000"
+  # Room this sign tracks on a multi-room server. Default server has one
+  # "default" room; flash each physical sign with its own room_id to drive
+  # multiple signs from one server. Must match [a-z0-9_-]{1,32}.
+  room_id: "default"
   update_interval: "15min"
   # Optional shared secret matching DOORPLATE_TOKEN on the server. Blank
   # disables auth (fine for trusted LAN). Set to enable X-Doorplate-Token.
@@ -23,7 +27,7 @@ esphome:
             wifi.connected:
       - delay: 500ms
       - http_request.get:
-          url: "http://${server_host}:${server_port}/status"
+          url: "http://${server_host}:${server_port}/status/${room_id}"
           request_headers:
             X-Doorplate-Token: "${doorplate_token}"
           capture_response: true

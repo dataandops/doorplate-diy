@@ -44,13 +44,15 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
   on e-ink. When a source has an ICS URL, a background worker polls every
   10 min and auto-populates today's events. Works with Google, Apple,
   Outlook, Calendly, Notion — anything that exports iCal. No OAuth.
+- **Multiple signs from one server** — done / M
+  State now nests under `rooms[room_id]`. One server instance drives any
+  number of signs via `/status/<room_id>` and `/update/<room_id>`. The
+  control panel has a room selector in the top bar; ESPHome carries a
+  `room_id` substitution per physical sign. Legacy flat state auto-migrates
+  into `rooms["default"]` on first load.
 
 ## Next — committed, not yet built
 
-- **Multiple signs from one server** — idea / M
-  Key each sign by `room_id`; `/status/<room_id>` and `/update/<room_id>`.
-  Control panel grows a room selector. ESPHome substitutes `room_id` into
-  the request URL.
 - **Home Assistant integration** — idea / M
   Either MQTT publish on state change (HA consumes) or a native HA component
   that wraps the REST API. Lets HA automations flip busy based on presence
