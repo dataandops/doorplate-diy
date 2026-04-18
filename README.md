@@ -325,9 +325,10 @@ Then match it on the sign side (`esphome/meeting-sign.yaml`, substitution
 No custom enclosure required. Both panels drop cleanly into a 5×7"
 shadow-box picture frame.
 
-- **Recommended**: [IKEA RIBBA 5×7" (13×18 cm)](https://www.ikea.com/) — deep
-  enough (~4.5 cm) that the driver board and USB-C cable sit comfortably
-  behind the mat.
+- **Recommended**: [IKEA RÖDALM 5×7" birch effect](https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/)
+  — ~32 mm cavity depth with adjustable-position backing, so the driver
+  board and USB-C cable fit cleanly. Warm birch face looks at home in
+  most rooms.
 - Replace the paper insert with the e-ink panel, facing outward.
 - The driver board + USB-C cable live in the shadow-box cavity behind.
 - Trim the mat to expose the active display area (~91×77 mm for 4.2",
@@ -337,7 +338,7 @@ shadow-box picture frame.
   cable out, or run it through the existing hanger slot.
 
 **Alternates**: IKEA FISKBO (~$3, thinner depth — cable routing is tighter),
-or any 5×7" shadow-box frame with ≥25 mm rebate depth.
+or any 5×7" frame with ≥25 mm cavity depth behind the glass.
 
 ## Bill of materials
 
@@ -348,7 +349,7 @@ or any 5×7" shadow-box frame with ≥25 mm rebate depth.
 | Waveshare 4.2" e-Paper Module     |    $25    | https://www.waveshare.com/4.2inch-e-paper-module.htm                                      |
 | Waveshare ESP32 Driver Board      |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
 | USB-C cable                       |     $3    | Any 6' USB-C charging cable                                                               |
-| IKEA RIBBA 5×7" picture frame     |     $5    | Any 5×7" shadow-box frame with ≥25 mm rebate                                              |
+| IKEA RÖDALM 5×7" birch frame      |     $5    | https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/                         |
 
 ### Premium Kit — Waveshare 3.6" Spectra 6 color (~$60)
 
@@ -357,7 +358,7 @@ or any 5×7" shadow-box frame with ≥25 mm rebate depth.
 | Waveshare 3.6" e-Paper (Spectra 6)     |    $42    | https://www.waveshare.com/3.6inch-e-paper-module-g.htm                                    |
 | Waveshare ESP32 Driver Board           |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
 | USB-C cable                            |     $3    | Any 6' USB-C charging cable                                                               |
-| IKEA RIBBA 5×7" picture frame          |     $5    | Any 5×7" shadow-box frame with ≥25 mm rebate                                              |
+| IKEA RÖDALM 5×7" birch frame           |     $5    | https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/                         |
 
 ## Wiring
 

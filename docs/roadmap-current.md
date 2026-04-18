@@ -22,7 +22,7 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
   Pillow renderer that produces a pixel-accurate PNG of the e-ink layout so
   you can iterate without owning hardware.
 - **Picture-frame case documentation** — done / S
-  IKEA RIBBA 5×7" shadow-box hack, BOM + assembly notes in README.
+  IKEA RÖDALM 5×7" birch-effect frame, BOM + assembly notes in README.
 - **Kit BOM tables** — done / S
   Self-source instructions for Standard and Premium kit tiers.
 - **Opt-in shared-secret auth** — done / S
