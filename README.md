@@ -325,9 +325,10 @@ Then match it on the sign side (`esphome/meeting-sign.yaml`, substitution
 No custom enclosure required. Both panels drop cleanly into a 5×7"
 shadow-box picture frame.
 
-- **Recommended**: [IKEA RIBBA 5×7" (13×18 cm)](https://www.ikea.com/) — deep
-  enough (~4.5 cm) that the driver board and USB-C cable sit comfortably
-  behind the mat.
+- **Recommended**: [IKEA RÖDALM 5×7" birch effect](https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/)
+  — ~32 mm cavity depth with adjustable-position backing, so the driver
+  board and USB-C cable fit cleanly. Warm birch face looks at home in
+  most rooms.
 - Replace the paper insert with the e-ink panel, facing outward.
 - The driver board + USB-C cable live in the shadow-box cavity behind.
 - Trim the mat to expose the active display area (~91×77 mm for 4.2",
@@ -337,27 +338,64 @@ shadow-box picture frame.
   cable out, or run it through the existing hanger slot.
 
 **Alternates**: IKEA FISKBO (~$3, thinner depth — cable routing is tighter),
-or any 5×7" shadow-box frame with ≥25 mm rebate depth.
+or any 5×7" frame with ≥25 mm cavity depth behind the glass.
 
 ## Bill of materials
 
-### Standard Kit — Waveshare 4.2" B&W (~$43)
+### Standard Kit — Waveshare 4.2" B&W (~$51)
 
 | Part                              | Est. cost | Link                                                                                      |
 | --------------------------------- | --------: | ----------------------------------------------------------------------------------------- |
 | Waveshare 4.2" e-Paper Module     |    $25    | https://www.waveshare.com/4.2inch-e-paper-module.htm                                      |
 | Waveshare ESP32 Driver Board      |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
-| USB-C cable                       |     $3    | Any 6' USB-C charging cable                                                               |
-| IKEA RIBBA 5×7" picture frame     |     $5    | Any 5×7" shadow-box frame with ≥25 mm rebate                                              |
+| USB-C cable + 5 V / 1 A adapter   |     $8    | Any phone charger works (you probably have one)                                           |
+| IKEA RÖDALM 5×7" birch frame      |     $5    | https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/                         |
+| *Optional: 2000 mAh LiPo battery* |    *$12*  | *JST-PH 2.0 connector — plugs straight into the driver board*                             |
 
-### Premium Kit — Waveshare 3.6" Spectra 6 color (~$60)
+### Premium Kit — Waveshare 3.6" Spectra 6 color (~$68)
 
-| Part                                   | Est. cost | Link                                                                                      |
-| -------------------------------------- | --------: | ----------------------------------------------------------------------------------------- |
-| Waveshare 3.6" e-Paper (Spectra 6)     |    $42    | https://www.waveshare.com/3.6inch-e-paper-module-g.htm                                    |
-| Waveshare ESP32 Driver Board           |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
-| USB-C cable                            |     $3    | Any 6' USB-C charging cable                                                               |
-| IKEA RIBBA 5×7" picture frame          |     $5    | Any 5×7" shadow-box frame with ≥25 mm rebate                                              |
+| Part                                       | Est. cost | Link                                                                                      |
+| ------------------------------------------ | --------: | ----------------------------------------------------------------------------------------- |
+| Waveshare 3.6" e-Paper HAT+ (E, Spectra 6) |    $42    | https://www.waveshare.com/3.6inch-e-paper-hat-plus-e.htm                                  |
+| Waveshare ESP32 Driver Board               |    $10    | https://www.waveshare.com/product/e-paper-esp32-driver-board.htm                          |
+| USB-C cable + 5 V / 1 A adapter            |     $8    | Any phone charger works (you probably have one)                                           |
+| IKEA RÖDALM 5×7" birch frame               |     $5    | https://www.ikea.com/us/en/p/roedalm-frame-birch-effect-30548866/                         |
+| *Optional: 2000 mAh LiPo battery*          |    *$12*  | *JST-PH 2.0 connector — plugs straight into the driver board*                             |
+
+> **Driver board note:** the 3.6" Spectra 6 ships as a HAT+ form-factor
+> panel. It can be driven from our standard ESP32 Driver Board over raw
+> SPI, but the pin mapping differs from the Standard kit. Full wiring
+> for this combo is on the roadmap alongside ESPHome's `epaper_spi`
+> support for Spectra 6.
+
+## Power
+
+Two ways to run the sign:
+
+**USB-C wall power (default)** — plug any 5 V / 1 A USB-C phone charger
+into the driver board's USB-C port. Always-on, never thinks about
+batteries. Ideal next to an outlet.
+
+**LiPo battery (stick-anywhere)** — the Waveshare ESP32 Driver Board
+has a JST-PH 2.0 connector and an onboard charging IC. Plug in a
+2000 mAh LiPo, connect USB-C once to charge, then you're free to mount
+the sign anywhere.
+
+Expected battery life with the default 15-minute refresh cadence:
+
+| Battery        | Expected life    |
+| -------------- | ---------------- |
+| 1000 mAh LiPo  | ~2 weeks         |
+| 2000 mAh LiPo  | ~1 month         |
+| 3000 mAh LiPo  | ~6 weeks         |
+
+The math: ESP32 wakes ~30 s to fetch + render + sleep, drawing ~70 mA.
+Deep sleep is ~10 µA. Average current is ~2.5 mA, which dominates the
+battery life calculation. Longer `sleep_duration` in
+`esphome/meeting-sign.yaml` → longer battery life.
+
+**Safety:** LiPo cells need care. Don't puncture, don't leave in a hot
+car, use cells with a built-in protection circuit (most do).
 
 ## Wiring
 

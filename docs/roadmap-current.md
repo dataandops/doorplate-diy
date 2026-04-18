@@ -22,7 +22,7 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
   Pillow renderer that produces a pixel-accurate PNG of the e-ink layout so
   you can iterate without owning hardware.
 - **Picture-frame case documentation** — done / S
-  IKEA RIBBA 5×7" shadow-box hack, BOM + assembly notes in README.
+  IKEA RÖDALM 5×7" birch-effect frame, BOM + assembly notes in README.
 - **Kit BOM tables** — done / S
   Self-source instructions for Standard and Premium kit tiers.
 - **Opt-in shared-secret auth** — done / S
@@ -83,6 +83,9 @@ Each item has a **status** (idea / speccing / in-progress / done) and a rough
   mmWave or PIR sensor in the room; ESP32 listens and flips `available` to
   false when it detects occupancy. Requires a second data path (currently
   the sign is one-way pull-only).
-- **Battery + LiPo power option** — idea / M
-  USB-C powered v1 is fine for rooms with outlets. A LiPo option unlocks
-  stick-anywhere placement; requires power-management circuitry review.
+- **Optimise battery life for the LiPo option** — idea / S
+  Basic LiPo support already works out of the box (the ESP32 Driver Board
+  has charging + JST-PH connector built in; documented in README). Next
+  step: tune `sleep_duration`, disable WiFi power-save to WAKE_NO_BEACON
+  during sync, benchmark real-world battery life, and publish a
+  per-cadence life table.
