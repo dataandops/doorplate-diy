@@ -144,7 +144,7 @@ def test_persistence_across_restart(tmp_path, monkeypatch):
 
     assert data_file.exists()
     saved = json.loads(data_file.read_text())
-    assert saved["room_name"] == "Reload Room"
+    assert saved["rooms"]["default"]["room_name"] == "Reload Room"
 
     app2 = server_module.create_app()
     with app2.test_client() as c:
@@ -394,10 +394,11 @@ def test_merged_schedule_sorts_manual_and_synced(client, monkeypatch):
     client.post("/update", json={"schedule": [{"time": "14:00", "title": "Deep work"}]})
     # Write synced entries directly via the same file path.
     state = srv._load_state()
-    state["sources"] = {
+    room = state["rooms"]["default"]
+    room["sources"] = {
         "work": {"label": "Work", "accent": "#0091ea", "short": "W", "ics_url": "https://x/w"},
     }
-    state["synced_schedule"] = {
+    room["synced_schedule"] = {
         "work": [
             {"time": "09:00", "title": "Standup", "source": "work", "synced": True},
             {"time": "11:30", "title": "Review", "source": "work", "synced": True},
@@ -427,8 +428,8 @@ def test_schedule_write_drops_synced_items(client):
     import server as srv
 
     saved = srv._load_state()
-    # Only the manual row survives in state["schedule"]
-    assert saved["schedule"] == [{"time": "14:00", "title": "Manual"}]
+    # Only the manual row survives in the default room's schedule
+    assert saved["rooms"]["default"]["schedule"] == [{"time": "14:00", "title": "Manual"}]
 
 
 def test_sources_refresh_endpoint_triggers_poll(client, monkeypatch):
@@ -646,7 +647,7 @@ def test_source_removal_clears_synced_schedule(client):
     import server as srv
 
     state = srv._load_state()
-    state["synced_schedule"] = {
+    state["rooms"]["default"]["synced_schedule"] = {
         "work": [{"time": "09:00", "title": "X", "source": "work", "synced": True}]
     }
     srv._save_state(state)
@@ -654,4 +655,144 @@ def test_source_removal_clears_synced_schedule(client):
     # Remove the source via /update
     client.post("/update", json={"sources": {}})
     saved = srv._load_state()
-    assert saved["synced_schedule"] == {}
+    assert saved["rooms"]["default"]["synced_schedule"] == {}
+
+
+# ---------- multi-room ----------
+
+
+def test_default_room_exists_on_fresh_state(client):
+    import server as srv
+
+    state = srv._load_state()
+    assert "rooms" in state
+    assert "default" in state["rooms"]
+    assert state["rooms"]["default"]["room_name"] == "Meeting Room"
+
+
+def test_migrate_flat_state_wraps_under_default(tmp_path, monkeypatch):
+    data_file = tmp_path / "sign_data.json"
+    legacy = {
+        "room_name": "Old Room",
+        "available": False,
+        "schedule": [{"time": "09:00", "title": "Legacy"}],
+        "joke_index": 3,
+        "last_updated": "2026-04-01T00:00:00+00:00",
+        "mode": "studio",
+        "custom_labels": {"free": "OPEN", "busy": "BUSY"},
+        "time_format": "24h",
+        "sources": {},
+        "synced_schedule": {},
+    }
+    data_file.write_text(json.dumps(legacy))
+    monkeypatch.setattr(server_module, "DATA_FILE", data_file)
+    monkeypatch.delenv("DOORPLATE_TOKEN", raising=False)
+
+    state = server_module._load_state()
+    assert "rooms" in state
+    assert state["rooms"]["default"]["room_name"] == "Old Room"
+    assert state["rooms"]["default"]["mode"] == "studio"
+    assert state["rooms"]["default"]["schedule"] == [{"time": "09:00", "title": "Legacy"}]
+
+
+def test_status_alias_returns_default_room(client):
+    client.post("/update", json={"room_name": "Alias Room"})
+    legacy = client.get("/status").get_json()
+    by_id = client.get("/status/default").get_json()
+    assert legacy["room_name"] == "Alias Room"
+    assert by_id["room_name"] == "Alias Room"
+
+
+def test_status_by_room_id_returns_that_room(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    data = client.get("/status/acorn").get_json()
+    assert data["room_name"] == "Acorn"
+
+
+def test_unknown_room_returns_404(client):
+    res = client.get("/status/nope")
+    assert res.status_code == 404
+
+
+def test_create_room_succeeds(client):
+    res = client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data == {"id": "acorn", "room_name": "Acorn"}
+
+    rooms = client.get("/rooms").get_json()
+    ids = [r["id"] for r in rooms]
+    assert "default" in ids and "acorn" in ids
+
+
+def test_create_room_rejects_invalid_id(client):
+    for bad in ("Has Space", "UPPER", "a" * 33, "", "bad!"):
+        res = client.post("/rooms", json={"room_id": bad, "room_name": "X"})
+        assert res.status_code == 400, f"expected 400 for {bad!r}"
+
+
+def test_create_room_rejects_duplicate(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    res = client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn 2"})
+    assert res.status_code == 409
+
+
+def test_delete_room_succeeds(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    res = client.delete("/rooms/acorn")
+    assert res.status_code == 200
+    assert client.get("/status/acorn").status_code == 404
+
+
+def test_delete_default_room_returns_400(client):
+    res = client.delete("/rooms/default")
+    assert res.status_code == 400
+
+
+def test_delete_unknown_room_returns_404(client):
+    res = client.delete("/rooms/ghost")
+    assert res.status_code == 404
+
+
+def test_list_rooms_returns_id_and_name(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    rooms = client.get("/rooms").get_json()
+    assert isinstance(rooms, list)
+    for r in rooms:
+        assert set(r) == {"id", "room_name"}
+
+
+def test_update_room_isolates_changes(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    client.post("/update/acorn", json={"room_name": "Acorn Renamed", "available": False})
+
+    default_state = client.get("/status").get_json()
+    acorn_state = client.get("/status/acorn").get_json()
+    assert default_state["room_name"] == "Meeting Room"
+    assert default_state["available"] is True
+    assert acorn_state["room_name"] == "Acorn Renamed"
+    assert acorn_state["available"] is False
+
+
+def test_room_ids_must_match_regex(client):
+    res = client.get("/status/Has%20Space")
+    assert res.status_code in (400, 404)
+    res = client.post("/update/BADID", json={"room_name": "x"})
+    assert res.status_code == 400
+
+
+def test_rooms_create_requires_auth(auth_client):
+    res = auth_client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    assert res.status_code == 401
+
+
+def test_rooms_delete_requires_auth(auth_client):
+    # seed via authed request
+    ok = auth_client.post(
+        "/rooms",
+        json={"room_id": "acorn", "room_name": "Acorn"},
+        headers={"X-Doorplate-Token": "s3cret"},
+    )
+    assert ok.status_code == 201
+    res = auth_client.delete("/rooms/acorn")
+    assert res.status_code == 401

@@ -259,3 +259,56 @@ def test_sync_source_returns_friendly_404_message(monkeypatch):
     assert events == []
     assert error is not None
     assert "404" in error
+
+
+# ---------- multi-room ----------
+
+
+def test_sync_worker_iterates_all_rooms(monkeypatch):
+    today_dt = datetime.now().astimezone().replace(hour=9, minute=0, second=0, microsecond=0)
+    sample = _ics([_vevent("a", today_dt.astimezone(UTC), "Meeting")])
+
+    fetched = []
+
+    def fake_fetch(url, timeout=15):
+        fetched.append(url)
+        return sample
+
+    monkeypatch.setattr(ics_sync, "fetch_ics", fake_fetch)
+
+    state = {
+        "rooms": {
+            "default": {
+                "sources": {
+                    "work": {
+                        "label": "Work",
+                        "accent": "#0091ea",
+                        "short": "W",
+                        "ics_url": "https://example.test/default.ics",
+                    }
+                },
+                "synced_schedule": {},
+            },
+            "acorn": {
+                "sources": {
+                    "cal": {
+                        "label": "Acorn Cal",
+                        "accent": "#2e7d32",
+                        "short": "A",
+                        "ics_url": "https://example.test/acorn.ics",
+                    }
+                },
+                "synced_schedule": {},
+            },
+        }
+    }
+    stored = {}
+    worker = ics_sync.SyncWorker(lambda: state, lambda s: stored.update(s), interval=3600)
+    worker.poll_once()
+
+    assert sorted(fetched) == [
+        "https://example.test/acorn.ics",
+        "https://example.test/default.ics",
+    ]
+    assert "work" in stored["rooms"]["default"]["synced_schedule"]
+    assert "cal" in stored["rooms"]["acorn"]["synced_schedule"]
