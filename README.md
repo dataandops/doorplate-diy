@@ -4,8 +4,7 @@
 
 From [Data and Operations LLC](https://dataandoperations.com).
 
-![doorplate-diy hero](docs/hero.png)
-<!-- TODO: replace docs/hero.png with a real photo once the first physical sign is built. -->
+![A WiFi-connected e-ink meeting room sign you build in an afternoon](docs/hero.png)
 
 ---
 
@@ -28,13 +27,10 @@ redraws the e-ink panel, and sleeps again.
 
 ## Kits
 
+![Standard and Premium kits](docs/kits.png)
+
 Pre-assembled kits will be available from Data and Operations LLC soon. In
 the meantime, the BOMs below tell you how to self-source.
-
-| Kit          | Price   | Panel                                 | Best for                 |
-| ------------ | ------- | ------------------------------------- | ------------------------ |
-| **Standard** | ~$43    | Waveshare 4.2" B&W                    | Most meeting rooms       |
-| **Premium**  | ~$60    | Waveshare 3.6" Spectra 6 color        | Style-forward workspaces |
 
 > **Coming soon** — pre-assembled kits from Data and Operations LLC. For now,
 > build your own with the BOMs below.
@@ -93,6 +89,8 @@ esphome run meeting-sign.yaml
 **5. Slot the panel into a picture frame** (see **Case** below).
 
 ## Test without hardware
+
+![Three zero-hardware test paths](docs/test-without-hardware.png)
 
 You don't need an ESP32 or e-ink panel to try this end-to-end:
 
@@ -156,6 +154,8 @@ works fine too.
 
 ## Modes
 
+![Five built-in modes plus unlimited custom](docs/modes.png)
+
 The sign ships with five presets, picked from the control panel **Mode**
 dropdown:
 
@@ -171,6 +171,34 @@ Animations play on the control-panel placard preview in real time. On the
 e-ink panel, an animated busy mode triggers a 2-frame flash on every wake
 (~1.5 s extra refresh, ~every 15 min by default). The e-ink is B&W, so
 animation is a visual blink, not color.
+
+## Use cases
+
+Same sign, different room. Three configurations we built for inspiration:
+
+### Podcast studio — ON AIR
+
+![Studio mode: ON AIR placard with pulsing red badge](docs/use-case-studio.png)
+
+Mode: **Studio**. Event titles pull from your recording calendar. The red
+badge pulses in the browser preview and gives a visible flash on every
+e-ink refresh when the session is live.
+
+### Home office — DO NOT DISTURB
+
+![Home office mode: orange DO NOT DISTURB badge with family calendar sources](docs/use-case-home-office.png)
+
+Mode: **Focus**. Work calendar drives the top rows; a separate "kid
+calendar" source (green chip) adds the important interruptions. Keep
+the door polite without Slack statuses.
+
+### Multi-room office
+
+![Four placards side by side: Acorn, Oak, Maple, Birch](docs/use-case-multi-room.png)
+
+One server drives every sign. Each room picks its own mode and
+schedule. This is on the roadmap as a first-class feature; today you
+can run one server per sign as a workaround.
 
 ## Time display
 
@@ -364,16 +392,23 @@ doorplate-diy/
 ├── docker-compose.yml             # optional container path
 ├── .dockerignore
 ├── docs/
-│   └── roadmap-current.md         # living Now/Next/Later
+│   ├── roadmap-current.md         # living Now/Next/Later
+│   └── *.png                      # README graphics (hero, kits, modes, use cases)
 ├── ops/
 │   └── com.dataandoperations.doorplate.plist
+├── scripts/
+│   └── make_ics.py                # dev helper for generating test ICS feeds
+├── graphics/
+│   └── generate_doorplate_graphics.py  # regenerates docs/*.png (Docker-based)
 ├── server/
-│   ├── server.py                  # Flask app: /, /status, /update, /themes
+│   ├── server.py                  # Flask app: /, /status, /update, /themes, /sources/*, /ics/*
+│   ├── ics_sync.py                # ICS subscription worker
 │   ├── render_preview.py          # PIL-based hardware-free simulator
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   ├── tests/
 │   │   ├── test_server.py
+│   │   ├── test_ics_sync.py
 │   │   └── test_render_preview.py
 │   └── static/
 │       ├── index.html             # control panel (vanilla JS)
@@ -383,6 +418,20 @@ doorplate-diy/
     ├── secrets.yaml               # gitignored template
     └── fonts/                     # gitignored — drop Roboto TTFs here
 ```
+
+**Regenerating the README graphics:**
+
+```bash
+docker run --rm --ipc=host --init --entrypoint python \
+  -v "$(pwd)/graphics:/out" \
+  modern-graphics /out/generate_doorplate_graphics.py
+cp graphics/*.png docs/   # adjust names — see the script
+```
+
+The source-of-truth script is `graphics/generate_doorplate_graphics.py`.
+It uses the `modern-graphics` Docker image (built separately) and
+registers a custom `doorplate` colour theme that matches the control
+panel's `ink.css`. No Python install on the host required.
 
 ## Roadmap
 

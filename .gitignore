@@ -5,6 +5,9 @@ esphome/fonts/
 plans/
 preview.png
 data/
+graphics/*.png
+graphics/gallery.html
+graphics/graphics/
 __pycache__/
 *.pyc
 .env
