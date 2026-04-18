@@ -15,6 +15,8 @@ DATA_FILE = DATA_DIR / "sign_data.json"
 ICS_DIR = DATA_DIR / "ics"
 STATIC_DIR = BASE_DIR / "static"
 PUBLISH_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+ROOM_ID_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+DEFAULT_ROOM_ID = "default"
 
 JOKES = [
     ("Why don't scientists trust atoms?", "Because they make up everything."),
@@ -79,8 +81,9 @@ HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CUSTOM_LABEL_MAX = 24
 SOURCE_LABEL_MAX = 32
 SOURCE_SHORT_MAX = 2
+ROOM_NAME_MAX = 64
 
-DEFAULT_STATE = {
+DEFAULT_ROOM_STATE = {
     "room_name": "Meeting Room",
     "available": True,
     "schedule": [],  # manually-entered rows only
@@ -93,6 +96,57 @@ DEFAULT_STATE = {
     "sources": {},
 }
 
+DEFAULT_STATE = {
+    "rooms": {DEFAULT_ROOM_ID: DEFAULT_ROOM_STATE},
+}
+
+# Legacy flat keys we recognize at the top level of sign_data.json for
+# migration from pre-multi-room installs.
+_LEGACY_ROOM_KEYS = set(DEFAULT_ROOM_STATE.keys())
+
+
+def _fresh_room_state() -> dict:
+    return json.loads(json.dumps(DEFAULT_ROOM_STATE))
+
+
+def _fresh_state() -> dict:
+    return {"rooms": {DEFAULT_ROOM_ID: _fresh_room_state()}}
+
+
+def _migrate_if_legacy(loaded: dict) -> dict:
+    """Wrap a pre-multi-room flat-state dict into the new {rooms: {...}} shape.
+
+    A file written by an older build has `room_name` (etc.) at the top level.
+    A file written by this build has `rooms`. We detect the legacy shape by
+    absence of `rooms` and presence of any known room-level key.
+    """
+    if "rooms" in loaded and isinstance(loaded["rooms"], dict):
+        return loaded
+    if any(k in loaded for k in _LEGACY_ROOM_KEYS):
+        merged_room = _fresh_room_state()
+        for k in _LEGACY_ROOM_KEYS:
+            if k in loaded:
+                merged_room[k] = loaded[k]
+        return {"rooms": {DEFAULT_ROOM_ID: merged_room}}
+    return _fresh_state()
+
+
+def _normalize_state(state: dict) -> dict:
+    """Ensure every room has all expected keys (for forward-compat reads)."""
+    rooms = state.get("rooms") or {}
+    if not isinstance(rooms, dict) or not rooms:
+        return _fresh_state()
+    out_rooms = {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        merged = _fresh_room_state()
+        merged.update(room)
+        out_rooms[rid] = merged
+    if DEFAULT_ROOM_ID not in out_rooms:
+        out_rooms[DEFAULT_ROOM_ID] = _fresh_room_state()
+    return {"rooms": out_rooms}
+
 
 def _load_state() -> dict:
     if not DATA_FILE.exists():
@@ -102,14 +156,9 @@ def _load_state() -> dict:
             loaded = json.load(f)
     except (json.JSONDecodeError, OSError):
         return _fresh_state()
-    merged = _fresh_state()
-    merged.update(loaded)
-    return merged
-
-
-def _fresh_state() -> dict:
-    # Deep copy so nested dicts (custom_labels, sources) don't get shared.
-    return json.loads(json.dumps(DEFAULT_STATE))
+    if not isinstance(loaded, dict):
+        return _fresh_state()
+    return _normalize_state(_migrate_if_legacy(loaded))
 
 
 def _save_state(state: dict) -> None:
@@ -125,11 +174,11 @@ def _save_state(state: dict) -> None:
         raise
 
 
-def _resolve_mode(state: dict) -> tuple[str, str, str, str]:
-    mode_key = state.get("mode") or "meeting_room"
+def _resolve_mode(room: dict) -> tuple[str, str, str, str]:
+    mode_key = room.get("mode") or "meeting_room"
     mode = MODES.get(mode_key) or MODES["meeting_room"]
     if mode_key == "custom":
-        cl = state.get("custom_labels") or {}
+        cl = room.get("custom_labels") or {}
         free = (cl.get("free") or "AVAILABLE").strip() or "AVAILABLE"
         busy = (cl.get("busy") or "IN USE").strip() or "IN USE"
     else:
@@ -182,12 +231,6 @@ def _format_time(iso_str: str | None, fmt: str, now: datetime | None = None) -> 
 
 
 def _format_schedule_time(time_hhmm: str, fmt: str) -> str:
-    """Format a `HH:MM` string per time_format. 12h → `9:00 AM`.
-
-    Only 12h actually alters the output; 24h/relative/iso/off all keep the
-    underlying `HH:MM` (relative/iso/off don't make sense for future meetings,
-    so we default to 24h for them).
-    """
     if fmt != "12h" or not time_hhmm or ":" not in time_hhmm:
         return time_hhmm
     try:
@@ -219,10 +262,9 @@ def _format_schedule_display(schedule: list, sources: dict, time_format: str = "
     return lines
 
 
-def _merged_schedule(state: dict) -> list[dict]:
-    """Manual rows + synced rows from all sources, sorted by time."""
-    manual = list(state.get("schedule") or [])
-    synced_by_source = state.get("synced_schedule") or {}
+def _merged_schedule(room: dict) -> list[dict]:
+    manual = list(room.get("schedule") or [])
+    synced_by_source = room.get("synced_schedule") or {}
     merged = list(manual)
     for events in synced_by_source.values():
         merged.extend(events)
@@ -235,45 +277,39 @@ def _merged_schedule(state: dict) -> list[dict]:
     return merged
 
 
-def _public_state(state: dict) -> dict:
-    joke_q, joke_a = JOKES[state["joke_index"] % len(JOKES)]
-    free, busy, animation, accent = _resolve_mode(state)
-    available = bool(state["available"])
+def _public_room(room: dict) -> dict:
+    joke_q, joke_a = JOKES[room["joke_index"] % len(JOKES)]
+    free, busy, animation, accent = _resolve_mode(room)
+    available = bool(room["available"])
     status_label = free if available else busy
-    # Animation only applies in busy state (visual cue for attention).
     status_animation = animation if (not available and animation != "none") else "none"
-    sources = state.get("sources") or {}
-    time_format = state.get("time_format") or "relative"
-    merged = _merged_schedule(state)
+    sources = room.get("sources") or {}
+    time_format = room.get("time_format") or "relative"
+    merged = _merged_schedule(room)
     return {
-        "room_name": state["room_name"],
+        "room_name": room["room_name"],
         "available": available,
         "schedule": merged,
         "schedule_display": _format_schedule_display(merged, sources, time_format),
         "joke_q": joke_q,
         "joke_a": joke_a,
-        "last_updated": state["last_updated"],
+        "last_updated": room["last_updated"],
         "status_label": status_label,
         "status_animation": status_animation,
         "status_accent": accent,
-        "mode": state.get("mode") or "meeting_room",
+        "mode": room.get("mode") or "meeting_room",
         "modes": [
             {"key": k, "label": v["label"], "free": v["free"], "busy": v["busy"]}
             for k, v in MODES.items()
         ],
-        "custom_labels": state.get("custom_labels") or dict(DEFAULT_STATE["custom_labels"]),
+        "custom_labels": room.get("custom_labels") or dict(DEFAULT_ROOM_STATE["custom_labels"]),
         "time_format": time_format,
-        "time_display": _format_time(state["last_updated"], time_format),
+        "time_display": _format_time(room["last_updated"], time_format),
         "sources": sources,
     }
 
 
 def _build_ics_body(events: list[dict], cal_name: str) -> str:
-    """Serialize a list of {time, title, duration_min?, date?} into an ICS file body.
-
-    Used by POST /ics/<name>. Local / floating times so the parser treats them
-    as the server's timezone (matches the rest of doorplate's time handling).
-    """
     import uuid
     from datetime import timedelta
 
@@ -319,11 +355,6 @@ def _check_auth() -> bool:
 
 
 def _validate_sources(value, existing: dict | None = None):
-    """Validate an incoming sources payload.
-
-    Preserves server-managed fields (`last_synced`, `last_sync_error`) from
-    `existing` so a round-trip through the control panel doesn't wipe them.
-    """
     if not isinstance(value, dict):
         return None, "sources must be an object"
     existing = existing or {}
@@ -360,7 +391,6 @@ def _validate_sources(value, existing: dict | None = None):
             "accent": accent.lower(),
             "short": short.strip(),
             "ics_url": ics_url,
-            # Preserve server-written fields so the round-trip doesn't drop them.
             "last_synced": prev.get("last_synced") if ics_url == prev.get("ics_url", "") else None,
             "last_sync_error": (
                 prev.get("last_sync_error") if ics_url == prev.get("ics_url", "") else None
@@ -368,6 +398,92 @@ def _validate_sources(value, existing: dict | None = None):
         }
         out[key] = entry
     return out, None
+
+
+def _apply_update(room: dict, payload: dict) -> tuple[dict | None, tuple[dict, int] | None]:
+    """Apply an /update payload to a room dict in place.
+
+    Returns (room, None) on success or (None, (error_json, status)) on failure.
+    """
+    if "room_name" in payload:
+        room_name = payload["room_name"]
+        if not isinstance(room_name, str):
+            return None, ({"error": "room_name must be a string"}, 400)
+        room["room_name"] = room_name
+
+    if "available" in payload:
+        available = payload["available"]
+        if not isinstance(available, bool):
+            return None, ({"error": "available must be a boolean"}, 400)
+        room["available"] = available
+
+    if "mode" in payload:
+        mode = payload["mode"]
+        if not isinstance(mode, str) or mode not in MODES:
+            return None, ({"error": f"mode must be one of {list(MODES)}"}, 400)
+        room["mode"] = mode
+
+    if "custom_labels" in payload:
+        cl = payload["custom_labels"]
+        if not isinstance(cl, dict):
+            return None, ({"error": "custom_labels must be an object"}, 400)
+        for k in ("free", "busy"):
+            v = cl.get(k, "")
+            if not isinstance(v, str) or not v.strip() or len(v) > CUSTOM_LABEL_MAX:
+                return None, (
+                    {"error": f"custom_labels.{k} must be 1-{CUSTOM_LABEL_MAX} chars"},
+                    400,
+                )
+        room["custom_labels"] = {"free": cl["free"], "busy": cl["busy"]}
+
+    if "time_format" in payload:
+        tf = payload["time_format"]
+        if not isinstance(tf, str) or tf not in TIME_FORMATS:
+            return None, ({"error": f"time_format must be one of {list(TIME_FORMATS)}"}, 400)
+        room["time_format"] = tf
+
+    if "sources" in payload:
+        sources, err = _validate_sources(payload["sources"], existing=room.get("sources"))
+        if err:
+            return None, ({"error": err}, 400)
+        room["sources"] = sources
+        synced = room.get("synced_schedule") or {}
+        for key in list(synced):
+            if key not in sources or not sources[key].get("ics_url"):
+                synced.pop(key, None)
+        room["synced_schedule"] = synced
+
+    if "schedule" in payload:
+        schedule = payload["schedule"]
+        if not isinstance(schedule, list):
+            return None, ({"error": "schedule must be a list"}, 400)
+        allowed_sources = set(room.get("sources") or {})
+        cleaned = []
+        for row in schedule:
+            if not isinstance(row, dict) or "time" not in row or "title" not in row:
+                return None, ({"error": "schedule rows must have 'time' and 'title'"}, 400)
+            if row.get("synced") is True:
+                continue
+            item = {"time": row["time"], "title": row["title"]}
+            source = row.get("source")
+            if source is not None:
+                if not isinstance(source, str):
+                    return None, ({"error": "schedule.source must be a string"}, 400)
+                if source not in allowed_sources:
+                    return None, ({"error": f"unknown source {source!r}"}, 400)
+                item["source"] = source
+            cleaned.append(item)
+        room["schedule"] = cleaned
+
+    if payload.get("new_joke"):
+        room["joke_index"] = (room["joke_index"] + 1) % len(JOKES)
+
+    room["last_updated"] = datetime.now(UTC).isoformat(timespec="seconds")
+    return room, None
+
+
+def _valid_room_id(room_id: str) -> bool:
+    return isinstance(room_id, str) and bool(ROOM_ID_RE.match(room_id))
 
 
 def create_app() -> Flask:
@@ -378,9 +494,101 @@ def create_app() -> Flask:
     def index():
         return send_from_directory(STATIC_DIR, "index.html")
 
+    # ---------- status (per-room + legacy alias) ----------
+
+    def _status_for(room_id: str):
+        state = _load_state()
+        room = state["rooms"].get(room_id)
+        if room is None:
+            return jsonify({"error": f"unknown room {room_id!r}"}), 404
+        return jsonify(_public_room(room))
+
     @app.get("/status")
-    def status():
-        return jsonify(_public_state(_load_state()))
+    def status_default():
+        return _status_for(DEFAULT_ROOM_ID)
+
+    @app.get("/status/<room_id>")
+    def status_room(room_id: str):
+        if not _valid_room_id(room_id):
+            return jsonify({"error": "room_id must match [a-z0-9_-]{1,32}"}), 400
+        return _status_for(room_id)
+
+    # ---------- rooms CRUD ----------
+
+    @app.get("/rooms")
+    def rooms_list():
+        state = _load_state()
+        rooms = [
+            {"id": rid, "room_name": r.get("room_name") or rid} for rid, r in state["rooms"].items()
+        ]
+        rooms.sort(key=lambda r: (r["id"] != DEFAULT_ROOM_ID, r["id"]))
+        return jsonify(rooms)
+
+    @app.post("/rooms")
+    def rooms_create():
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        payload = request.get_json(silent=True) or {}
+        room_id = payload.get("room_id", "")
+        room_name = payload.get("room_name", "")
+        if not _valid_room_id(room_id):
+            return jsonify({"error": "room_id must match [a-z0-9_-]{1,32}"}), 400
+        if not isinstance(room_name, str) or not room_name.strip():
+            return jsonify({"error": "room_name is required"}), 400
+        if len(room_name) > ROOM_NAME_MAX:
+            return jsonify({"error": f"room_name must be 1-{ROOM_NAME_MAX} chars"}), 400
+        state = _load_state()
+        if room_id in state["rooms"]:
+            return jsonify({"error": f"room {room_id!r} already exists"}), 409
+        new_room = _fresh_room_state()
+        new_room["room_name"] = room_name
+        state["rooms"][room_id] = new_room
+        _save_state(state)
+        return jsonify({"id": room_id, "room_name": room_name}), 201
+
+    @app.delete("/rooms/<room_id>")
+    def rooms_delete(room_id: str):
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        if not _valid_room_id(room_id):
+            return jsonify({"error": "room_id must match [a-z0-9_-]{1,32}"}), 400
+        if room_id == DEFAULT_ROOM_ID:
+            return jsonify({"error": "cannot delete the default room"}), 400
+        state = _load_state()
+        if room_id not in state["rooms"]:
+            return jsonify({"error": f"unknown room {room_id!r}"}), 404
+        del state["rooms"][room_id]
+        _save_state(state)
+        return jsonify({"ok": True})
+
+    # ---------- update (per-room + legacy alias) ----------
+
+    def _do_update(room_id: str):
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        payload = request.get_json(silent=True) or {}
+        state = _load_state()
+        room = state["rooms"].get(room_id)
+        if room is None:
+            return jsonify({"error": f"unknown room {room_id!r}"}), 404
+        _, err = _apply_update(room, payload)
+        if err is not None:
+            body, status = err
+            return jsonify(body), status
+        _save_state(state)
+        return jsonify(_public_room(room))
+
+    @app.post("/update")
+    def update_default():
+        return _do_update(DEFAULT_ROOM_ID)
+
+    @app.post("/update/<room_id>")
+    def update_room(room_id: str):
+        if not _valid_room_id(room_id):
+            return jsonify({"error": "room_id must match [a-z0-9_-]{1,32}"}), 400
+        return _do_update(room_id)
+
+    # ---------- themes + ICS publishing + sources ----------
 
     @app.get("/themes")
     def themes():
@@ -392,27 +600,16 @@ def create_app() -> Flask:
 
     @app.post("/sources/refresh")
     def sources_refresh():
-        """Trigger an immediate ICS poll for all configured sources.
-
-        Auth-gated same as /update.
-        """
         if not _check_auth():
             return jsonify({"error": "unauthorized"}), 401
         worker = ics_sync.SyncWorker(_load_state, _save_state)
         worker.poll_once()
-        return jsonify(_public_state(_load_state()))
+        # Return the default room's public state for backward compat.
+        state = _load_state()
+        return jsonify(_public_room(state["rooms"][DEFAULT_ROOM_ID]))
 
     @app.post("/ics/<name>")
     def ics_publish(name: str):
-        """Publish an ICS feed under <name> so sources can subscribe to it.
-
-        Body: {"events": [{"time": "HH:MM", "title": "...", ...}], "cal_name": "..."}.
-        Files land in DATA_DIR/ics/<name>.ics. Served by GET /ics/<name>.ics.
-
-        Intended for local/dev use: lets you point a source at
-        http://<this-server>/ics/<name>.ics and skip running a second HTTP
-        server for test ICS files. Auth-gated same as /update.
-        """
         if not _check_auth():
             return jsonify({"error": "unauthorized"}), 401
         if not PUBLISH_NAME_RE.match(name):
@@ -423,8 +620,6 @@ def create_app() -> Flask:
             return jsonify({"error": "events must be a list"}), 400
         cal_name = payload.get("cal_name", name)
 
-        # Build ICS body with _build_ics_body (defined below). Validate rows
-        # on the way in so bogus payloads fail before we touch disk.
         for row in events:
             if not isinstance(row, dict) or "time" not in row or "title" not in row:
                 return jsonify({"error": "each event needs 'time' and 'title'"}), 400
@@ -475,12 +670,6 @@ def create_app() -> Flask:
 
     @app.post("/sources/test")
     def sources_test():
-        """Synchronously probe an ICS URL and return events or a specific error.
-
-        Body: {"url": "..."}. No state is persisted.
-        Auth-gated. Does not require the source to exist yet — useful for
-        testing before saving.
-        """
         if not _check_auth():
             return jsonify({"error": "unauthorized"}), 401
         payload = request.get_json(silent=True) or {}
@@ -497,98 +686,10 @@ def create_app() -> Flask:
             {
                 "ok": True,
                 "event_count": len(events),
-                "events": events[:5],  # preview, cap for the UI
+                "events": events[:5],
                 "resolved_url": url,
             }
         )
-
-    @app.post("/update")
-    def update():
-        if not _check_auth():
-            return jsonify({"error": "unauthorized"}), 401
-
-        payload = request.get_json(silent=True) or {}
-        state = _load_state()
-
-        if "room_name" in payload:
-            room_name = payload["room_name"]
-            if not isinstance(room_name, str):
-                return jsonify({"error": "room_name must be a string"}), 400
-            state["room_name"] = room_name
-
-        if "available" in payload:
-            available = payload["available"]
-            if not isinstance(available, bool):
-                return jsonify({"error": "available must be a boolean"}), 400
-            state["available"] = available
-
-        if "mode" in payload:
-            mode = payload["mode"]
-            if not isinstance(mode, str) or mode not in MODES:
-                return jsonify({"error": f"mode must be one of {list(MODES)}"}), 400
-            state["mode"] = mode
-
-        if "custom_labels" in payload:
-            cl = payload["custom_labels"]
-            if not isinstance(cl, dict):
-                return jsonify({"error": "custom_labels must be an object"}), 400
-            for k in ("free", "busy"):
-                v = cl.get(k, "")
-                if not isinstance(v, str) or not v.strip() or len(v) > CUSTOM_LABEL_MAX:
-                    return (
-                        jsonify({"error": f"custom_labels.{k} must be 1-{CUSTOM_LABEL_MAX} chars"}),
-                        400,
-                    )
-            state["custom_labels"] = {"free": cl["free"], "busy": cl["busy"]}
-
-        if "time_format" in payload:
-            tf = payload["time_format"]
-            if not isinstance(tf, str) or tf not in TIME_FORMATS:
-                return jsonify({"error": f"time_format must be one of {list(TIME_FORMATS)}"}), 400
-            state["time_format"] = tf
-
-        if "sources" in payload:
-            sources, err = _validate_sources(payload["sources"], existing=state.get("sources"))
-            if err:
-                return jsonify({"error": err}), 400
-            state["sources"] = sources
-            # Drop synced schedules for sources that were removed or lost ics_url.
-            synced = state.get("synced_schedule") or {}
-            for key in list(synced):
-                if key not in sources or not sources[key].get("ics_url"):
-                    synced.pop(key, None)
-            state["synced_schedule"] = synced
-
-        if "schedule" in payload:
-            schedule = payload["schedule"]
-            if not isinstance(schedule, list):
-                return jsonify({"error": "schedule must be a list"}), 400
-            allowed_sources = set(state.get("sources") or {})
-            cleaned = []
-            for row in schedule:
-                if not isinstance(row, dict) or "time" not in row or "title" not in row:
-                    return jsonify({"error": "schedule rows must have 'time' and 'title'"}), 400
-                # Synced rows are worker-owned; the client echoes them back but
-                # they're not part of the manual schedule.
-                if row.get("synced") is True:
-                    continue
-                item = {"time": row["time"], "title": row["title"]}
-                source = row.get("source")
-                if source is not None:
-                    if not isinstance(source, str):
-                        return jsonify({"error": "schedule.source must be a string"}), 400
-                    if source not in allowed_sources:
-                        return jsonify({"error": f"unknown source {source!r}"}), 400
-                    item["source"] = source
-                cleaned.append(item)
-            state["schedule"] = cleaned
-
-        if payload.get("new_joke"):
-            state["joke_index"] = (state["joke_index"] + 1) % len(JOKES)
-
-        state["last_updated"] = datetime.now(UTC).isoformat(timespec="seconds")
-        _save_state(state)
-        return jsonify(_public_state(state))
 
     return app
 
@@ -597,11 +698,6 @@ app = create_app()
 
 
 def _maybe_start_sync_worker() -> ics_sync.SyncWorker | None:
-    """Start the ICS sync worker if DOORPLATE_ICS_SYNC=1.
-
-    Guarded by env var so tests (which import this module) don't spawn
-    background threads. Set in docker-compose.yml and `make dev` for prod use.
-    """
     if os.environ.get("DOORPLATE_ICS_SYNC", "").strip() not in ("1", "true", "on"):
         return None
     interval = int(os.environ.get("DOORPLATE_ICS_POLL_INTERVAL", ics_sync.DEFAULT_POLL_INTERVAL))

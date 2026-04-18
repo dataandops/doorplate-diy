@@ -214,20 +214,36 @@ class SyncWorker:
             self._stop.wait(self.interval)
 
     def poll_once(self) -> None:
-        """Run one full poll pass: sync every source with an ics_url, save state."""
+        """Run one full poll pass across every room's sources, save state."""
         state = self.load_state()
-        sources = state.get("sources") or {}
-        synced_schedule = state.get("synced_schedule") or {}
+        # Multi-room: {"rooms": {room_id: {...sources, synced_schedule}}}.
+        # Legacy flat state is handled by the server's migration; here we also
+        # tolerate it so this module stays testable in isolation.
+        if "rooms" in state and isinstance(state["rooms"], dict):
+            rooms = state["rooms"]
+        else:
+            rooms = {"default": state}
+
+        changed = False
+        for _room_id, room in rooms.items():
+            if self._poll_room(room):
+                changed = True
+
+        if changed:
+            self.save_state(state)
+
+    def _poll_room(self, room: dict[str, Any]) -> bool:
+        """Sync every source on a single room. Returns True if the room changed."""
+        sources = room.get("sources") or {}
+        synced_schedule = room.get("synced_schedule") or {}
         changed = False
 
-        # Drop synced entries whose source was deleted or lost its URL.
         for key in list(synced_schedule):
             cfg = sources.get(key) or {}
             if key not in sources or not cfg.get("ics_url"):
                 synced_schedule.pop(key, None)
                 changed = True
 
-        # Fetch each configured URL.
         for key, cfg in sources.items():
             ics_url = (cfg or {}).get("ics_url", "")
             if not ics_url:
@@ -239,6 +255,6 @@ class SyncWorker:
             changed = True
 
         if changed:
-            state["synced_schedule"] = synced_schedule
-            state["sources"] = sources
-            self.save_state(state)
+            room["synced_schedule"] = synced_schedule
+            room["sources"] = sources
+        return changed
