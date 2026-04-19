@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>doorplate-diy · welcome</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+  <link id="page-theme-css" rel="stylesheet" href="/static/themes/ink.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+    body { min-height: 100vh; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 28px; border-bottom: var(--divider);
+    }
+    .brand { font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+    .brand span { color: var(--accent); }
+    .topbar-meta { display: flex; gap: 14px; align-items: center; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+    main { max-width: 1180px; margin: 0 auto; padding: 40px 28px 80px; }
+
+    .hero { margin-bottom: 36px; }
+    .hero h1 {
+      font-family: var(--font-display); font-weight: 800; font-size: 40px;
+      letter-spacing: -0.02em; margin: 0 0 8px;
+    }
+    .hero p {
+      font-family: var(--font-mono); font-size: 13px; color: var(--muted);
+      margin: 0; letter-spacing: 0.04em;
+    }
+
+    .grid {
+      display: grid; gap: 18px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+
+    /* Each card carries its own theme via data-theme — see <style id="theme-cards"> below.
+       The base look (border, padding) inherits from the page theme but colors come from
+       the card's namespaced variables. */
+    .room-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      background: var(--paper);
+      color: var(--ink);
+      display: flex; flex-direction: column; gap: 14px;
+      box-shadow: 0 4px 12px var(--shadow);
+      transition: transform 0.15s ease;
+    }
+    .room-card:hover { transform: translateY(-2px); }
+
+    .room-card .name {
+      font-family: var(--font-display); font-weight: 700; font-size: 22px;
+      letter-spacing: -0.01em; line-height: 1.1;
+    }
+    .room-card .room-id {
+      font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+    .room-card .badge {
+      align-self: flex-start;
+      padding: 4px 10px;
+      font-family: var(--font-mono); font-weight: 500; font-size: 12px;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      border: 2px solid var(--ink);
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .room-card .badge.busy { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+    .room-card .field {
+      display: flex; gap: 8px; align-items: center;
+      font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+    }
+    .room-card select {
+      flex: 1; padding: 6px 8px;
+      font-family: var(--font-mono); font-size: 12px;
+      background: var(--paper-elevated); color: var(--ink);
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+
+    .room-card .actions {
+      display: flex; gap: 8px; margin-top: auto;
+    }
+    .btn-primary {
+      flex: 1; padding: 10px 14px;
+      background: var(--ink); color: var(--paper);
+      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; text-decoration: none; text-align: center;
+      border: 0; border-radius: var(--radius); cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--accent); color: var(--accent-ink); }
+    .btn-ghost {
+      padding: 8px 10px; background: transparent;
+      border: 1px solid var(--border); color: var(--ink);
+      font-family: var(--font-mono); font-size: 12px;
+      cursor: pointer; border-radius: var(--radius);
+    }
+    .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+    .new-room-card {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      min-height: 220px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; background: transparent;
+      font-family: var(--font-display); font-weight: 700; font-size: 18px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .new-room-card:hover { color: var(--accent); border-color: var(--accent); }
+
+    .archived-section {
+      margin-top: 36px;
+      border-top: var(--divider);
+      padding-top: 24px;
+    }
+    .archived-section > summary {
+      font-family: var(--font-mono); font-size: 12px;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--muted); cursor: pointer; padding: 4px 0;
+      list-style: none;
+    }
+    .archived-section > summary::before { content: "▸ "; }
+    .archived-section[open] > summary::before { content: "▾ "; }
+    .archived-section[open] > summary { margin-bottom: 18px; }
+    .archived-section .room-card { opacity: 0.7; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 18px; background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 13px; border-radius: var(--radius); opacity: 0; transition: opacity 0.2s; }
+    .toast.show { opacity: 1; }
+    .toast.error { background: var(--accent); color: var(--accent-ink); }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+      background: rgba(10, 10, 10, 0.45);
+      display: none; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+      padding: 28px; min-width: 380px; max-width: 92vw;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .modal h2 {
+      margin: 0; font-family: var(--font-display); font-weight: 700;
+      font-size: 22px; letter-spacing: -0.01em;
+    }
+    .modal label {
+      display: block; font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .modal input {
+      width: 100%; padding: 10px 12px;
+      font-family: var(--font-body); font-size: 16px;
+      background: var(--paper-elevated); color: var(--ink);
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .modal input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .modal .hint {
+      font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+      margin-top: 4px;
+    }
+    .modal .hint.error { color: var(--accent); }
+    .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  </style>
+  <style id="theme-cards"></style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">doorplate<span>·</span>diy</div>
+    <div class="topbar-meta">
+      <span id="api-indicator"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Welcome to your doorplate</h1>
+      <p id="room-count">— rooms configured</p>
+    </section>
+
+    <section class="grid" id="room-grid"></section>
+
+    <details id="archived-section" class="archived-section" hidden>
+      <summary><span id="archived-count">0</span> archived</summary>
+      <div class="grid" id="archived-grid"></div>
+    </details>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="modal-backdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <form id="new-room-form" class="modal">
+      <h2 id="modal-title">New room</h2>
+      <div>
+        <label for="modal-room-id">Room ID</label>
+        <input id="modal-room-id" type="text" autocomplete="off" placeholder="acorn" pattern="[a-z0-9_-]{1,32}" required>
+        <div class="hint" id="modal-id-hint">Lowercase letters, numbers, _ or -. Max 32 chars.</div>
+      </div>
+      <div>
+        <label for="modal-room-name">Display name</label>
+        <input id="modal-room-name" type="text" autocomplete="off" placeholder="Acorn Studio" required>
+      </div>
+      <div class="actions">
+        <button type="button" id="modal-cancel" class="btn-ghost">Cancel</button>
+        <button type="submit" id="modal-create" class="btn-primary" style="flex: 0 0 auto;">Create room</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="confirm-backdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal">
+      <h2 id="confirm-title">Confirm</h2>
+      <p id="confirm-body" class="hint" style="font-size: 13px; line-height: 1.5;"></p>
+      <div class="actions">
+        <button type="button" id="confirm-cancel" class="btn-ghost">Cancel</button>
+        <button type="button" id="confirm-ok" class="btn-primary" style="flex: 0 0 auto;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = `${window.location.protocol}//${window.location.host}`;
+    document.getElementById("api-indicator").textContent = `API: ${API_BASE}`;
+
+    // Polite redirect for stale ?room=<id> bookmarks from the multi-room
+    // intermediate state. Land them at /room/<id>.
+    {
+      const params = new URLSearchParams(window.location.search);
+      const stale = params.get("room");
+      if (stale && /^[a-z0-9_-]{1,32}$/.test(stale)) {
+        window.location.replace(`/room/${encodeURIComponent(stale)}`);
+      }
+    }
+
+    let availableThemes = ["ink"];
+
+    async function loadThemes() {
+      try {
+        const res = await fetch(`${API_BASE}/themes`);
+        const list = await res.json();
+        if (Array.isArray(list) && list.length) availableThemes = list;
+      } catch (_) { /* fall back */ }
+
+      // Fetch each theme's CSS, rewrite :root → [data-theme=<name>],
+      // and concat into one <style> block. This lets every card render
+      // in its own theme without a stylesheet swap per card.
+      const blocks = await Promise.all(availableThemes.map(async (name) => {
+        try {
+          const res = await fetch(`/static/themes/${name}.css`);
+          const css = await res.text();
+          // Scope every :root rule to [data-theme="<name>"].
+          return css.replace(/:root\b/g, `[data-theme="${name}"]`);
+        } catch (_) {
+          return "";
+        }
+      }));
+      document.getElementById("theme-cards").textContent = blocks.join("\n");
+    }
+
+    async function loadRooms() {
+      const grid = document.getElementById("room-grid");
+      const archivedGrid = document.getElementById("archived-grid");
+      const archivedSection = document.getElementById("archived-section");
+      const archivedCount = document.getElementById("archived-count");
+      const countEl = document.getElementById("room-count");
+      let rooms = [];
+      try {
+        const res = await fetch(`${API_BASE}/rooms?include_archived=1`);
+        rooms = await res.json();
+      } catch (err) {
+        toast(`Failed to load rooms: ${err.message}`, true);
+        return;
+      }
+      const active = rooms.filter(r => !r.archived);
+      const archived = rooms.filter(r => r.archived);
+      countEl.textContent =
+        active.length === 1 ? "1 room configured" : `${active.length} rooms configured`;
+
+      grid.replaceChildren();
+      for (const r of active) grid.appendChild(roomCard(r));
+
+      const newCard = document.createElement("button");
+      newCard.type = "button";
+      newCard.className = "new-room-card";
+      newCard.textContent = "+ New room";
+      newCard.addEventListener("click", createRoom);
+      grid.appendChild(newCard);
+
+      archivedGrid.replaceChildren();
+      for (const r of archived) archivedGrid.appendChild(roomCard(r));
+      archivedCount.textContent = archived.length;
+      archivedSection.hidden = archived.length === 0;
+    }
+
+    function roomCard(r) {
+      const card = document.createElement("article");
+      card.className = "room-card";
+      card.dataset.theme = r.theme || "ink";
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = r.room_name || r.id;
+
+      const rid = document.createElement("div");
+      rid.className = "room-id";
+      rid.textContent = r.id;
+
+      const badge = document.createElement("div");
+      badge.className = "badge" + (r.available ? "" : " busy");
+      badge.textContent = r.status_label || (r.available ? "AVAILABLE" : "IN USE");
+
+      const themeField = document.createElement("label");
+      themeField.className = "field";
+      const themeLabel = document.createElement("span");
+      themeLabel.textContent = "Theme";
+      const themeSelect = document.createElement("select");
+      for (const t of availableThemes) {
+        const opt = document.createElement("option");
+        opt.value = t; opt.textContent = t;
+        if (t === (r.theme || "ink")) opt.selected = true;
+        themeSelect.appendChild(opt);
+      }
+      themeSelect.addEventListener("change", async () => {
+        const newTheme = themeSelect.value;
+        try {
+          const headers = { "Content-Type": "application/json" };
+          const token = localStorage.getItem("doorplateToken");
+          if (token) headers["X-Doorplate-Token"] = token;
+          const res = await fetch(`${API_BASE}/update/${encodeURIComponent(r.id)}`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ theme: newTheme }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: res.status }));
+            throw new Error(err.error || res.status);
+          }
+          card.dataset.theme = newTheme;
+          toast(`${r.room_name}: theme → ${newTheme}`);
+        } catch (err) {
+          toast(`Theme update failed: ${err.message}`, true);
+        }
+      });
+      themeField.append(themeLabel, themeSelect);
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      if (r.archived) {
+        const restore = document.createElement("button");
+        restore.type = "button";
+        restore.className = "btn-primary";
+        restore.textContent = "Restore";
+        restore.addEventListener("click", () => unarchiveRoom(r.id, r.room_name));
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn-ghost";
+        del.textContent = "Delete forever";
+        del.title = "Permanently delete this room and all its data";
+        del.addEventListener("click", () => deleteRoom(r.id, r.room_name));
+        actions.append(restore, del);
+      } else {
+        const open = document.createElement("a");
+        open.className = "btn-primary";
+        open.href = `/room/${encodeURIComponent(r.id)}`;
+        open.textContent = "Open →";
+        actions.appendChild(open);
+        if (r.id !== "default") {
+          const archive = document.createElement("button");
+          archive.type = "button";
+          archive.className = "btn-ghost";
+          archive.textContent = "Archive";
+          archive.title = "Hide this room from the dashboard. Data is preserved and can be restored.";
+          archive.addEventListener("click", () => archiveRoom(r.id, r.room_name));
+          actions.appendChild(archive);
+        }
+      }
+
+      card.append(name, rid, badge, themeField, actions);
+      return card;
+    }
+
+    async function archiveRoom(id, name) {
+      const ok = await openConfirm({
+        title: `Archive "${name || id}"?`,
+        body: "The room is hidden from the dashboard but its data is preserved. You can restore it from the archived section any time.",
+        okLabel: "Archive room",
+      });
+      if (!ok) return;
+      try {
+        const headers = {};
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/rooms/${encodeURIComponent(id)}/archive`, {
+          method: "POST",
+          headers,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.status }));
+          throw new Error(err.error || res.status);
+        }
+        await loadRooms();
+        toast(`Room "${id}" archived`);
+      } catch (err) {
+        toast(`Archive failed: ${err.message}`, true);
+      }
+    }
+
+    async function unarchiveRoom(id, name) {
+      try {
+        const headers = {};
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/rooms/${encodeURIComponent(id)}/unarchive`, {
+          method: "POST",
+          headers,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.status }));
+          throw new Error(err.error || res.status);
+        }
+        await loadRooms();
+        toast(`Room "${id}" restored`);
+      } catch (err) {
+        toast(`Restore failed: ${err.message}`, true);
+      }
+    }
+
+    // ---------- new-room modal ----------
+    const modalBackdrop = document.getElementById("modal-backdrop");
+    const modalForm = document.getElementById("new-room-form");
+    const modalIdInput = document.getElementById("modal-room-id");
+    const modalNameInput = document.getElementById("modal-room-name");
+    const modalIdHint = document.getElementById("modal-id-hint");
+    const modalSubmit = document.getElementById("modal-create");
+
+    function openNewRoomModal() {
+      modalIdInput.value = "";
+      modalNameInput.value = "";
+      modalIdHint.textContent = "Lowercase letters, numbers, _ or -. Max 32 chars.";
+      modalIdHint.classList.remove("error");
+      modalBackdrop.classList.add("show");
+      setTimeout(() => modalIdInput.focus(), 0);
+    }
+
+    function closeNewRoomModal() {
+      modalBackdrop.classList.remove("show");
+    }
+
+    document.getElementById("modal-cancel").addEventListener("click", closeNewRoomModal);
+    modalBackdrop.addEventListener("click", (e) => {
+      if (e.target === modalBackdrop) closeNewRoomModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modalBackdrop.classList.contains("show")) closeNewRoomModal();
+    });
+    // Auto-fill display name from room id while typing (only if user hasn't
+    // touched the name field yet).
+    let nameTouched = false;
+    modalNameInput.addEventListener("input", () => { nameTouched = true; });
+    modalIdInput.addEventListener("input", () => {
+      if (!nameTouched) modalNameInput.value = modalIdInput.value;
+    });
+
+    async function createRoom() {
+      openNewRoomModal();
+      nameTouched = false;
+    }
+
+    modalForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const roomId = modalIdInput.value.trim();
+      const roomName = modalNameInput.value.trim() || roomId;
+      if (!/^[a-z0-9_-]{1,32}$/.test(roomId)) {
+        modalIdHint.textContent = "Invalid room_id — use [a-z0-9_-], max 32 chars";
+        modalIdHint.classList.add("error");
+        modalIdInput.focus();
+        return;
+      }
+      modalSubmit.disabled = true;
+      try {
+        const headers = { "Content-Type": "application/json" };
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/rooms`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ room_id: roomId, room_name: roomName }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.status }));
+          throw new Error(err.error || res.status);
+        }
+        closeNewRoomModal();
+        await loadRooms();
+        toast(`Room "${roomId}" created`);
+      } catch (err) {
+        modalIdHint.textContent = err.message;
+        modalIdHint.classList.add("error");
+      } finally {
+        modalSubmit.disabled = false;
+      }
+    });
+
+    async function deleteRoom(id, name) {
+      const ok = await openConfirm({
+        title: `Delete "${name || id}" forever?`,
+        body: "This permanently removes the room and all its data. This cannot be undone.",
+        okLabel: "Delete forever",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        const headers = {};
+        const token = localStorage.getItem("doorplateToken");
+        if (token) headers["X-Doorplate-Token"] = token;
+        const res = await fetch(`${API_BASE}/rooms/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.status }));
+          throw new Error(err.error || res.status);
+        }
+        await loadRooms();
+        toast(`Room "${id}" deleted`);
+      } catch (err) {
+        toast(`Delete failed: ${err.message}`, true);
+      }
+    }
+
+    // ---------- generic confirm modal ----------
+    const confirmBackdrop = document.getElementById("confirm-backdrop");
+    const confirmTitle = document.getElementById("confirm-title");
+    const confirmBody = document.getElementById("confirm-body");
+    const confirmOk = document.getElementById("confirm-ok");
+    const confirmCancel = document.getElementById("confirm-cancel");
+
+    function openConfirm({ title, body, okLabel = "Confirm", danger = false }) {
+      return new Promise((resolve) => {
+        confirmTitle.textContent = title;
+        confirmBody.textContent = body;
+        confirmOk.textContent = okLabel;
+        confirmOk.style.background = danger ? "var(--accent)" : "";
+        confirmOk.style.color = danger ? "var(--accent-ink)" : "";
+        confirmBackdrop.classList.add("show");
+        setTimeout(() => confirmOk.focus(), 0);
+
+        const cleanup = () => {
+          confirmBackdrop.classList.remove("show");
+          confirmOk.removeEventListener("click", onOk);
+          confirmCancel.removeEventListener("click", onCancel);
+          confirmBackdrop.removeEventListener("click", onBackdrop);
+          document.removeEventListener("keydown", onKey);
+        };
+        const onOk = () => { cleanup(); resolve(true); };
+        const onCancel = () => { cleanup(); resolve(false); };
+        const onBackdrop = (e) => { if (e.target === confirmBackdrop) onCancel(); };
+        const onKey = (e) => { if (e.key === "Escape") onCancel(); };
+
+        confirmOk.addEventListener("click", onOk);
+        confirmCancel.addEventListener("click", onCancel);
+        confirmBackdrop.addEventListener("click", onBackdrop);
+        document.addEventListener("keydown", onKey);
+      });
+    }
+
+    let toastTimer = null;
+    function toast(msg, isError = false) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.toggle("error", isError);
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
+    }
+
+    (async () => {
+      await loadThemes();
+      await loadRooms();
+    })();
+  </script>
+</body>
+</html>

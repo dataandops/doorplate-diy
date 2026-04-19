@@ -16,7 +16,9 @@ ICS_DIR = DATA_DIR / "ics"
 STATIC_DIR = BASE_DIR / "static"
 PUBLISH_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 ROOM_ID_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+THEME_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 DEFAULT_ROOM_ID = "default"
+DEFAULT_THEME = "ink"
 
 JOKES = [
     ("Why don't scientists trust atoms?", "Because they make up everything."),
@@ -94,6 +96,8 @@ DEFAULT_ROOM_STATE = {
     "custom_labels": {"free": "AVAILABLE", "busy": "IN USE"},
     "time_format": "relative",
     "sources": {},
+    "theme": DEFAULT_THEME,
+    "archived": False,
 }
 
 DEFAULT_STATE = {
@@ -306,6 +310,7 @@ def _public_room(room: dict) -> dict:
         "time_format": time_format,
         "time_display": _format_time(room["last_updated"], time_format),
         "sources": sources,
+        "theme": room.get("theme") or DEFAULT_THEME,
     }
 
 
@@ -344,6 +349,13 @@ def _build_ics_body(events: list[dict], cal_name: str) -> str:
         f"{body}\r\n"
         "END:VCALENDAR\r\n"
     )
+
+
+def _list_themes() -> list[str]:
+    themes_dir = STATIC_DIR / "themes"
+    if not themes_dir.is_dir():
+        return [DEFAULT_THEME]
+    return sorted(p.stem for p in themes_dir.glob("*.css"))
 
 
 def _check_auth() -> bool:
@@ -442,6 +454,14 @@ def _apply_update(room: dict, payload: dict) -> tuple[dict | None, tuple[dict, i
             return None, ({"error": f"time_format must be one of {list(TIME_FORMATS)}"}, 400)
         room["time_format"] = tf
 
+    if "theme" in payload:
+        theme = payload["theme"]
+        if not isinstance(theme, str) or not THEME_NAME_RE.match(theme):
+            return None, ({"error": "theme must match [a-z0-9_-]{1,32}"}, 400)
+        if theme not in _list_themes():
+            return None, ({"error": f"unknown theme {theme!r}"}, 400)
+        room["theme"] = theme
+
     if "sources" in payload:
         sources, err = _validate_sources(payload["sources"], existing=room.get("sources"))
         if err:
@@ -491,7 +511,14 @@ def create_app() -> Flask:
     CORS(app)
 
     @app.get("/")
-    def index():
+    def dashboard():
+        return send_from_directory(STATIC_DIR, "dashboard.html")
+
+    @app.get("/room/<room_id>")
+    def control_panel(room_id: str):
+        # Always serve the page; the client fetches /status/<id> and shows
+        # an error toast for unknown rooms (mirrors the in-app fallback).
+        del room_id
         return send_from_directory(STATIC_DIR, "index.html")
 
     # ---------- status (per-room + legacy alias) ----------
@@ -517,11 +544,33 @@ def create_app() -> Flask:
 
     @app.get("/rooms")
     def rooms_list():
+        # Archived rooms are hidden by default — pass ?include_archived=1
+        # to get them too (the dashboard's "Archived rooms" panel uses this).
+        include_archived = request.args.get("include_archived", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         state = _load_state()
-        rooms = [
-            {"id": rid, "room_name": r.get("room_name") or rid} for rid, r in state["rooms"].items()
-        ]
-        rooms.sort(key=lambda r: (r["id"] != DEFAULT_ROOM_ID, r["id"]))
+        rooms = []
+        for rid, r in state["rooms"].items():
+            archived = bool(r.get("archived"))
+            if archived and not include_archived:
+                continue
+            free, busy, _, _ = _resolve_mode(r)
+            available = bool(r.get("available"))
+            rooms.append(
+                {
+                    "id": rid,
+                    "room_name": r.get("room_name") or rid,
+                    "theme": r.get("theme") or DEFAULT_THEME,
+                    "available": available,
+                    "status_label": free if available else busy,
+                    "archived": archived,
+                }
+            )
+        # Active rooms first (default pinned), then archived.
+        rooms.sort(key=lambda r: (r["archived"], r["id"] != DEFAULT_ROOM_ID, r["id"]))
         return jsonify(rooms)
 
     @app.post("/rooms")
@@ -545,6 +594,28 @@ def create_app() -> Flask:
         state["rooms"][room_id] = new_room
         _save_state(state)
         return jsonify({"id": room_id, "room_name": room_name}), 201
+
+    def _set_archived(room_id: str, archived: bool):
+        if not _check_auth():
+            return jsonify({"error": "unauthorized"}), 401
+        if not _valid_room_id(room_id):
+            return jsonify({"error": "room_id must match [a-z0-9_-]{1,32}"}), 400
+        if archived and room_id == DEFAULT_ROOM_ID:
+            return jsonify({"error": "cannot archive the default room"}), 400
+        state = _load_state()
+        if room_id not in state["rooms"]:
+            return jsonify({"error": f"unknown room {room_id!r}"}), 404
+        state["rooms"][room_id]["archived"] = archived
+        _save_state(state)
+        return jsonify({"id": room_id, "archived": archived})
+
+    @app.post("/rooms/<room_id>/archive")
+    def rooms_archive(room_id: str):
+        return _set_archived(room_id, True)
+
+    @app.post("/rooms/<room_id>/unarchive")
+    def rooms_unarchive(room_id: str):
+        return _set_archived(room_id, False)
 
     @app.delete("/rooms/<room_id>")
     def rooms_delete(room_id: str):
@@ -592,11 +663,7 @@ def create_app() -> Flask:
 
     @app.get("/themes")
     def themes():
-        themes_dir = STATIC_DIR / "themes"
-        if not themes_dir.is_dir():
-            return jsonify([])
-        names = sorted(p.stem for p in themes_dir.glob("*.css"))
-        return jsonify(names)
+        return jsonify(_list_themes())
 
     @app.post("/sources/refresh")
     def sources_refresh():
