@@ -759,7 +759,7 @@ def test_list_rooms_returns_id_and_name(client):
     rooms = client.get("/rooms").get_json()
     assert isinstance(rooms, list)
     for r in rooms:
-        assert set(r) == {"id", "room_name"}
+        assert {"id", "room_name"} <= set(r)
 
 
 def test_update_room_isolates_changes(client):
@@ -796,3 +796,190 @@ def test_rooms_delete_requires_auth(auth_client):
     assert ok.status_code == 201
     res = auth_client.delete("/rooms/acorn")
     assert res.status_code == 401
+
+
+# ---------- dashboard + per-room theme ----------
+
+
+def test_root_serves_dashboard(client):
+    res = client.get("/")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "Welcome" in body or "dashboard" in body.lower()
+
+
+def test_room_route_serves_control_panel(client):
+    res = client.get("/room/default")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    # The control panel HTML page contains "Live Placard Preview".
+    assert "Live Placard Preview" in body or "placard" in body.lower()
+
+
+def test_room_route_serves_for_unknown_room(client):
+    # Page should still load — the client handles missing-room toasting.
+    res = client.get("/room/ghost")
+    assert res.status_code == 200
+
+
+def test_default_theme_is_ink(client):
+    data = client.get("/status").get_json()
+    assert data["theme"] == "ink"
+
+
+def test_update_theme_persists(client):
+    res = client.post("/update", json={"theme": "terminal"})
+    assert res.status_code == 200
+    assert res.get_json()["theme"] == "terminal"
+    again = client.get("/status").get_json()
+    assert again["theme"] == "terminal"
+
+
+def test_update_invalid_theme_returns_400(client):
+    res = client.post("/update", json={"theme": "nope"})
+    assert res.status_code == 400
+
+
+def test_update_theme_rejects_bad_format(client):
+    for bad in ("UPPER", "has space", "../etc", "a" * 33):
+        res = client.post("/update", json={"theme": bad})
+        assert res.status_code == 400, f"expected 400 for {bad!r}"
+
+
+def test_rooms_list_includes_theme_and_available(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    rooms = client.get("/rooms").get_json()
+    by_id = {r["id"]: r for r in rooms}
+    assert by_id["default"]["theme"] == "ink"
+    assert by_id["default"]["available"] is True
+    assert by_id["acorn"]["theme"] == "ink"
+
+
+def test_legacy_state_gets_default_theme(tmp_path, monkeypatch):
+    data_file = tmp_path / "sign_data.json"
+    legacy = {
+        "room_name": "Old",
+        "available": True,
+        "schedule": [],
+        "synced_schedule": {},
+        "joke_index": 0,
+        "last_updated": None,
+        "mode": "meeting_room",
+        "custom_labels": {"free": "AVAILABLE", "busy": "IN USE"},
+        "time_format": "relative",
+        "sources": {},
+    }
+    data_file.write_text(json.dumps(legacy))
+    monkeypatch.setattr(server_module, "DATA_FILE", data_file)
+    state = server_module._load_state()
+    assert state["rooms"]["default"]["theme"] == "ink"
+
+
+# ---------- archive (soft delete) ----------
+
+
+def test_archive_room_sets_flag(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    res = client.post("/rooms/acorn/archive")
+    assert res.status_code == 200
+    assert res.get_json() == {"id": "acorn", "archived": True}
+
+
+def test_archive_excludes_room_from_default_list(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    client.post("/rooms/acorn/archive")
+    rooms = client.get("/rooms").get_json()
+    assert all(r["id"] != "acorn" for r in rooms)
+
+
+def test_archive_visible_with_include_archived(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    client.post("/rooms/acorn/archive")
+    rooms = client.get("/rooms?include_archived=1").get_json()
+    by_id = {r["id"]: r for r in rooms}
+    assert by_id["acorn"]["archived"] is True
+    assert by_id["default"]["archived"] is False
+
+
+def test_unarchive_restores_room(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    client.post("/rooms/acorn/archive")
+    res = client.post("/rooms/acorn/unarchive")
+    assert res.status_code == 200
+    rooms = client.get("/rooms").get_json()
+    assert any(r["id"] == "acorn" for r in rooms)
+
+
+def test_archive_default_room_returns_400(client):
+    res = client.post("/rooms/default/archive")
+    assert res.status_code == 400
+
+
+def test_archive_unknown_room_returns_404(client):
+    res = client.post("/rooms/ghost/archive")
+    assert res.status_code == 404
+
+
+def test_archive_requires_auth(auth_client):
+    auth_client.post(
+        "/rooms",
+        json={"room_id": "acorn", "room_name": "Acorn"},
+        headers={"X-Doorplate-Token": "s3cret"},
+    )
+    res = auth_client.post("/rooms/acorn/archive")
+    assert res.status_code == 401
+
+
+def test_archived_room_status_still_accessible(client):
+    """Archive preserves data — /status/<id> still works so Unarchive is non-destructive."""
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    client.post("/update/acorn", json={"room_name": "Renamed Acorn"})
+    client.post("/rooms/acorn/archive")
+    res = client.get("/status/acorn")
+    assert res.status_code == 200
+    assert res.get_json()["room_name"] == "Renamed Acorn"
+
+
+def test_sync_worker_skips_archived_rooms(monkeypatch):
+    import ics_sync as ics
+
+    fetched = []
+
+    def fake_fetch(url, timeout=15):
+        fetched.append(url)
+        return b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n"
+
+    monkeypatch.setattr(ics, "fetch_ics", fake_fetch)
+
+    state = {
+        "rooms": {
+            "default": {
+                "sources": {
+                    "work": {
+                        "label": "W",
+                        "accent": "#000000",
+                        "short": "W",
+                        "ics_url": "https://x/default.ics",
+                    }
+                },
+                "synced_schedule": {},
+                "archived": False,
+            },
+            "acorn": {
+                "sources": {
+                    "cal": {
+                        "label": "C",
+                        "accent": "#000000",
+                        "short": "C",
+                        "ics_url": "https://x/acorn.ics",
+                    }
+                },
+                "synced_schedule": {},
+                "archived": True,
+            },
+        }
+    }
+    stored = {}
+    worker = ics.SyncWorker(lambda: state, lambda s: stored.update(s), interval=3600)
+    worker.poll_once()
+    assert fetched == ["https://x/default.ics"]

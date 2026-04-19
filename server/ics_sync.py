@@ -226,6 +226,10 @@ class SyncWorker:
 
         changed = False
         for _room_id, room in rooms.items():
+            # Archived rooms keep their state but we skip polling — no point
+            # hammering ICS feeds for a sign that nothing's reading from.
+            if room.get("archived"):
+                continue
             if self._poll_room(room):
                 changed = True
 

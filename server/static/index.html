@@ -140,10 +140,9 @@
   <header class="topbar">
     <div class="brand">doorplate<span>·</span>diy</div>
     <div class="topbar-meta">
+      <a href="/" class="btn-ghost" title="Back to all rooms">← All rooms</a>
       <span id="api-indicator"></span>
-      <select id="room-picker" class="theme-picker" title="room"></select>
-      <button id="btn-new-room" class="btn-ghost" type="button" title="Create a new room">+ New room</button>
-      <button id="btn-delete-room" class="btn-ghost" type="button" title="Delete this room" hidden>×</button>
+      <span id="room-indicator"></span>
       <select id="theme-picker" class="theme-picker" title="theme"></select>
     </div>
   </header>
@@ -241,12 +240,14 @@
     const API_BASE = `${window.location.protocol}//${window.location.host}`;
     document.getElementById("api-indicator").textContent = `API: ${API_BASE}`;
 
-    // Which room the control panel is editing. Read from ?room=…; default
-    // is the "default" room (matches the server's legacy alias).
-    const urlParams = new URLSearchParams(window.location.search);
-    let currentRoomId = urlParams.get("room") || "default";
+    // Which room this control panel is editing. The dashboard links to
+    // /room/<id>; we parse the id from the path. Falls back to "default"
+    // if the URL is just "/" (lets the legacy bookmark keep working).
+    const pathMatch = window.location.pathname.match(/^\/room\/([a-z0-9_-]{1,32})\/?$/);
+    let currentRoomId = pathMatch ? pathMatch[1] : "default";
     const statusPath = () => `/status/${encodeURIComponent(currentRoomId)}`;
     const updatePath = () => `/update/${encodeURIComponent(currentRoomId)}`;
+    document.getElementById("room-indicator").textContent = `Room: ${currentRoomId}`;
 
     const state = {
       room_name: "Meeting Room",
@@ -263,9 +264,13 @@
       time_format: "relative",
       time_display: "not pushed yet",
       sources: {},
+      theme: "ink",
     };
 
     // ---------- theme ----------
+    // Theme is a per-room property stored on the server (set via POST
+    // /update/<room_id>). We populate the picker from /themes, select the
+    // room's current theme on load, and POST changes immediately.
     async function loadThemes() {
       const picker = document.getElementById("theme-picker");
       let themes = ["ink"];
@@ -275,23 +280,46 @@
         if (Array.isArray(list) && list.length) themes = list;
       } catch (_) { /* fall back to single theme */ }
 
-      const saved = localStorage.getItem("doorplateTheme") || "ink";
       picker.replaceChildren();
       for (const name of themes) {
         const opt = document.createElement("option");
         opt.value = name; opt.textContent = name;
-        if (name === saved) opt.selected = true;
         picker.appendChild(opt);
       }
-      applyTheme(picker.value);
-      picker.addEventListener("change", () => {
-        applyTheme(picker.value);
-        localStorage.setItem("doorplateTheme", picker.value);
+      // Selection is set in syncThemePicker() once /status responds.
+      picker.addEventListener("change", async () => {
+        const newTheme = picker.value;
+        applyTheme(newTheme);
+        try {
+          const headers = { "Content-Type": "application/json" };
+          const token = localStorage.getItem("doorplateToken");
+          if (token) headers["X-Doorplate-Token"] = token;
+          const res = await fetch(`${API_BASE}${updatePath()}`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ theme: newTheme }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: res.status }));
+            throw new Error(err.error || res.status);
+          }
+          state.theme = newTheme;
+        } catch (err) {
+          toast(`Theme save failed: ${err.message}`, true);
+        }
       });
     }
 
     function applyTheme(name) {
       document.getElementById("theme-css").href = `/static/themes/${name}.css`;
+    }
+
+    function syncThemePicker() {
+      const picker = document.getElementById("theme-picker");
+      if (!picker.options.length) return;
+      const want = state.theme || "ink";
+      for (const opt of picker.options) opt.selected = (opt.value === want);
+      applyTheme(want);
     }
 
     // ---------- time format ----------
@@ -561,6 +589,7 @@
       renderScheduleRows();
       renderPlacard();
       renderJokeCard();
+      syncThemePicker();
     }
 
     function renderScheduleRows() {
@@ -702,92 +731,14 @@
       document.getElementById("jc-a").textContent = state.joke_a ? `A: ${state.joke_a}` : "";
     }
 
-    // ---------- rooms ----------
-    async function loadRooms() {
-      const picker = document.getElementById("room-picker");
-      let rooms = [{ id: "default", room_name: "Meeting Room" }];
-      try {
-        const res = await fetch(`${API_BASE}/rooms`);
-        const list = await res.json();
-        if (Array.isArray(list) && list.length) rooms = list;
-      } catch (_) { /* fall back */ }
-
-      picker.replaceChildren();
-      for (const r of rooms) {
-        const opt = document.createElement("option");
-        opt.value = r.id;
-        opt.textContent = `${r.room_name} (${r.id})`;
-        if (r.id === currentRoomId) opt.selected = true;
-        picker.appendChild(opt);
-      }
-      // If the URL param points at a room the server doesn't know about,
-      // fall back to default so the page doesn't 404 on /status/<bad>.
-      if (!rooms.find(r => r.id === currentRoomId)) {
-        currentRoomId = "default";
-        picker.value = "default";
-      }
-      document.getElementById("btn-delete-room").hidden = currentRoomId === "default";
-    }
-
-    async function createRoom() {
-      const rawId = prompt("Room ID (lowercase, no spaces, e.g. 'acorn'):");
-      if (!rawId) return;
-      const roomId = rawId.trim();
-      if (!/^[a-z0-9_-]{1,32}$/.test(roomId)) {
-        toast("Invalid room_id — use [a-z0-9_-], max 32 chars", true);
-        return;
-      }
-      const roomName = prompt("Display name:", roomId) || roomId;
-      try {
-        const headers = { "Content-Type": "application/json" };
-        const token = localStorage.getItem("doorplateToken");
-        if (token) headers["X-Doorplate-Token"] = token;
-        const res = await fetch(`${API_BASE}/rooms`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ room_id: roomId, room_name: roomName.trim() }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: res.status }));
-          throw new Error(err.error || res.status);
-        }
-        // Navigate to the new room so the page reloads with its state.
-        window.location.search = `?room=${encodeURIComponent(roomId)}`;
-      } catch (err) {
-        toast(`Create failed: ${err.message}`, true);
-      }
-    }
-
-    async function deleteCurrentRoom() {
-      if (currentRoomId === "default") return;
-      if (!confirm(`Delete room "${currentRoomId}"? This can't be undone.`)) return;
-      try {
-        const headers = {};
-        const token = localStorage.getItem("doorplateToken");
-        if (token) headers["X-Doorplate-Token"] = token;
-        const res = await fetch(`${API_BASE}/rooms/${encodeURIComponent(currentRoomId)}`, {
-          method: "DELETE",
-          headers,
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: res.status }));
-          throw new Error(err.error || res.status);
-        }
-        window.location.search = "";  // back to default
-      } catch (err) {
-        toast(`Delete failed: ${err.message}`, true);
-      }
-    }
-
     // ---------- API ----------
     async function fetchStatus() {
       const res = await fetch(`${API_BASE}${statusPath()}`);
       if (!res.ok) {
-        toast(`Room "${currentRoomId}" not found; loading default`, true);
-        currentRoomId = "default";
+        toast(`Room "${currentRoomId}" not found — open the dashboard to pick one`, true);
+        return;
       }
-      const res2 = res.ok ? res : await fetch(`${API_BASE}${statusPath()}`);
-      const data = await res2.json();
+      const data = await res.json();
       Object.assign(state, data);
       render();
     }
@@ -905,18 +856,9 @@
       toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
     }
 
-    // ---------- room-picker events ----------
-    document.getElementById("room-picker").addEventListener("change", (e) => {
-      const rid = e.target.value;
-      window.location.search = rid === "default" ? "" : `?room=${encodeURIComponent(rid)}`;
-    });
-    document.getElementById("btn-new-room").addEventListener("click", () => createRoom());
-    document.getElementById("btn-delete-room").addEventListener("click", () => deleteCurrentRoom());
-
     // ---------- boot ----------
     (async () => {
       await loadThemes();
-      await loadRooms();
       await fetchStatus();
     })();
   </script>
