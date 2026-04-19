@@ -309,31 +309,45 @@ today or a specific error. Common errors:
 One server instance can drive any number of signs. State is keyed by
 `room_id`, with a `default` room created on first run.
 
-**Control panel**: the top bar has a room selector and a `+ New room`
-button. Selecting a room updates the URL to `?room=<room_id>`; every
-form field below edits just that room.
+**Dashboard**: visit `/` to see all your rooms at a glance — name,
+current status badge, and a per-room theme picker. Each card renders
+in its own theme so the dashboard doubles as a live theme preview.
+Hit `+ New room` to create one (modal form), `Open →` to drop into
+that room's control panel, or `Archive` to soft-delete (data preserved,
+can be restored later from the archived section).
+
+**Control panel**: lives at `/room/<room_id>`. Edits the room's name,
+mode, schedule, calendar sources, time format, and theme. The theme
+picker writes to the room on the server so two browsers see the same
+theme for a given room.
 
 **API**:
 
 ```bash
-# list rooms
+# list rooms (active only by default; pass include_archived=1 to see all)
 curl http://localhost:5000/rooms
+curl 'http://localhost:5000/rooms?include_archived=1'
 
 # create a new room (auth-gated if DOORPLATE_TOKEN is set)
 curl -X POST http://localhost:5000/rooms \
   -H 'Content-Type: application/json' \
   -d '{"room_id": "acorn", "room_name": "Acorn"}'
 
-# per-room status + update
+# per-room status + update (theme is just another field)
 curl http://localhost:5000/status/acorn
-curl -X POST http://localhost:5000/update/acorn -d '{"available": false}'
+curl -X POST http://localhost:5000/update/acorn -d '{"theme": "terminal"}'
 
-# delete
+# soft delete (archive) and restore — auth-gated
+curl -X POST http://localhost:5000/rooms/acorn/archive
+curl -X POST http://localhost:5000/rooms/acorn/unarchive
+
+# hard delete — auth-gated, irreversible
 curl -X DELETE http://localhost:5000/rooms/acorn
 ```
 
 Legacy `/status` and `/update` still work — they're aliases for the
 `default` room, so existing single-room deploys keep working unchanged.
+The default room can't be archived or deleted.
 
 **ESPHome**: flash each physical sign with its own `room_id` substitution.
 In `esphome/meeting-sign.yaml`:
@@ -342,6 +356,10 @@ In `esphome/meeting-sign.yaml`:
 substitutions:
   room_id: "acorn"   # unique per sign; must match [a-z0-9_-]{1,32}
 ```
+
+Archived rooms keep their state and `/status/<id>` still responds, so a
+sign briefly out of service won't 500 — it just won't get fresh ICS sync
+until you restore it.
 
 A file written by an older single-room build is auto-migrated into
 `rooms["default"]` on first load — no manual steps.
