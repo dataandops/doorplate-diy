@@ -472,21 +472,23 @@ dependency beyond NTP for the clock.
 ### Flash it — easy path
 
 If your dashboard server is running on the same machine you flash from,
-the dashboard gives you a pre-configured firmware file:
+the per-room settings page walks you through it:
 
-1. Open the dashboard at `http://localhost:5000/`, create the room
-   if it's not the default, then click **Firmware** on its card.
-   Saves as `doorplate-<room_id>.yaml` with `server_host` and
-   `room_id` already filled in.
-2. Move the file next to `esphome/secrets.yaml` so the `!secret`
-   includes resolve:
+1. Open the dashboard at `http://localhost:5000/`. Create the room if
+   needed, then click the **⚙** icon on its card.
+2. The settings page shows a **Download doorplate-&lt;id&gt;.yaml**
+   button with `server_host` and `room_id` already filled in, plus
+   step-by-step flashing instructions.
+3. One command pulls the config and flashes in one step:
    ```bash
-   mv ~/Downloads/doorplate-acorn.yaml esphome/
+   make flash ROOM=<room_id>
    ```
-3. Plug the driver board into USB-C, then:
-   ```bash
-   esphome run esphome/doorplate-acorn.yaml
-   ```
+   (Or manually: move the downloaded file next to `esphome/secrets.yaml`
+   and run `esphome run esphome/doorplate-<room_id>.yaml`.)
+
+Optional: set `ESPHOME_DASHBOARD_URL=http://localhost:6052` in the
+server's environment and the settings page surfaces a deep-link into
+your local ESPHome dashboard for browser-based OTA updates.
 
 ### Flash it — manual path
 

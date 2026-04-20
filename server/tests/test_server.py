@@ -1050,3 +1050,48 @@ def test_esphome_config_works_for_archived_room(client):
     res = client.get("/esphome/acorn.yaml")
     assert res.status_code == 200
     assert 'room_id: "acorn"' in res.get_data(as_text=True)
+
+
+# ---------- room settings page + /config ----------
+
+
+def test_settings_page_served(client):
+    res = client.get("/room/default/settings")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "Flash this sign" in body
+    assert "ESPHome dashboard" in body
+
+
+def test_settings_page_served_for_unknown_room(client):
+    # Mirrors the /room/<id> pattern — page loads, client surfaces the error.
+    res = client.get("/room/ghost/settings")
+    assert res.status_code == 200
+
+
+def test_config_endpoint_returns_null_when_unset(client, monkeypatch):
+    monkeypatch.delenv("ESPHOME_DASHBOARD_URL", raising=False)
+    res = client.get("/config")
+    assert res.status_code == 200
+    assert res.get_json() == {"esphome_dashboard_url": None}
+
+
+def test_config_endpoint_exposes_esphome_url(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setattr(server_module, "ICS_DIR", tmp_path / "ics")
+    monkeypatch.delenv("DOORPLATE_TOKEN", raising=False)
+    monkeypatch.setenv("ESPHOME_DASHBOARD_URL", "http://localhost:6052")
+    app = server_module.create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        res = c.get("/config")
+        assert res.get_json() == {"esphome_dashboard_url": "http://localhost:6052"}
+
+
+def test_config_endpoint_strips_whitespace(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setenv("ESPHOME_DASHBOARD_URL", "   ")  # blank-ish
+    app = server_module.create_app()
+    with app.test_client() as c:
+        res = c.get("/config")
+        assert res.get_json() == {"esphome_dashboard_url": None}

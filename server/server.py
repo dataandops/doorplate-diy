@@ -522,6 +522,24 @@ def create_app() -> Flask:
         del room_id
         return send_from_directory(STATIC_DIR, "index.html")
 
+    @app.get("/room/<room_id>/settings")
+    def room_settings(room_id: str):
+        # Same pattern as /room/<id>: let the client fetch /status and
+        # /config; show a friendly error if the room is unknown.
+        del room_id
+        return send_from_directory(STATIC_DIR, "settings.html")
+
+    @app.get("/config")
+    def server_config():
+        """Tiny endpoint surfacing server-level config to the frontend.
+
+        Currently just ESPHOME_DASHBOARD_URL so the per-room settings page
+        can deep-link into the user's local ESPHome dashboard. Null when
+        unset — frontend shows a 'configure this' nudge instead.
+        """
+        url = os.environ.get("ESPHOME_DASHBOARD_URL", "").strip() or None
+        return jsonify({"esphome_dashboard_url": url})
+
     # ---------- status (per-room + legacy alias) ----------
 
     def _status_for(room_id: str):
