@@ -1,5 +1,5 @@
 .PHONY: install-dev test lint format html-check esphome-validate preview dev ci clean \
-        docker-build docker-up docker-down docker-logs
+        docker-build docker-up docker-down docker-logs flash
 
 install-dev:
 	pip install -r server/requirements-dev.txt
@@ -27,6 +27,18 @@ preview:
 
 dev:
 	DOORPLATE_ICS_SYNC=1 python server/server.py
+
+# Flash a sign by room id, e.g. `make flash ROOM=acorn`.
+# Pulls the per-room ESPHome config from the running server, drops it into
+# esphome/ so `!secret` includes resolve, and invokes esphome run.
+# Set DOORPLATE_SERVER to override the default http://localhost:5000.
+ROOM ?= default
+DOORPLATE_SERVER ?= http://localhost:5000
+flash:
+	@curl -fsSL "$(DOORPLATE_SERVER)/esphome/$(ROOM).yaml" \
+		-o esphome/doorplate-$(ROOM).yaml
+	@echo "Fetched esphome/doorplate-$(ROOM).yaml from $(DOORPLATE_SERVER)"
+	esphome run esphome/doorplate-$(ROOM).yaml
 
 ci: lint test html-check esphome-validate
 

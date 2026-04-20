@@ -983,3 +983,115 @@ def test_sync_worker_skips_archived_rooms(monkeypatch):
     worker = ics.SyncWorker(lambda: state, lambda s: stored.update(s), interval=3600)
     worker.poll_once()
     assert fetched == ["https://x/default.ics"]
+
+
+# ---------- ESPHome config endpoint ----------
+
+
+def test_esphome_config_for_default_room_200(client):
+    res = client.get("/esphome/default.yaml")
+    assert res.status_code == 200
+    assert res.headers["Content-Type"].startswith("text/yaml")
+    body = res.get_data(as_text=True)
+    assert "esphome:" in body
+    assert "waveshare_epaper" in body
+
+
+def test_esphome_config_substitutes_room_id(client):
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    res = client.get("/esphome/acorn.yaml")
+    body = res.get_data(as_text=True)
+    assert 'room_id: "acorn"' in body
+    # And the placeholder is gone
+    assert 'room_id: "default"' not in body
+
+
+def test_esphome_config_substitutes_server_host(client):
+    res = client.get("/esphome/default.yaml", base_url="http://myhost.local:5050")
+    body = res.get_data(as_text=True)
+    assert 'server_host: "myhost.local"' in body
+    assert 'server_host: "your-mac.local"' not in body
+
+
+def test_esphome_config_preserves_comments(client):
+    """Comments in the template survive the substitution — downloaded file
+    matches the repo template for everything except the two values."""
+    res = client.get("/esphome/default.yaml")
+    body = res.get_data(as_text=True)
+    # A known comment from the template
+    assert "mDNS hostname" in body
+    assert "Must match [a-z0-9_-]" in body
+
+
+def test_esphome_config_unknown_room_404(client):
+    res = client.get("/esphome/nosuchroom.yaml")
+    assert res.status_code == 404
+
+
+def test_esphome_config_invalid_room_id_400(client):
+    # Routing: dots aren't in the room_id path converter, so "has.dots" matches
+    # the <room_id>.yaml pattern as "has" + ".dots.yaml" — which doesn't match.
+    # Test the cases Flask actually routes to the handler: uppercase, dash-only.
+    for bad in ("UPPER", "a" * 33):
+        res = client.get(f"/esphome/{bad}.yaml")
+        assert res.status_code in (400, 404), f"{bad!r} got {res.status_code}"
+
+
+def test_esphome_config_content_disposition_filename(client):
+    client.post("/rooms", json={"room_id": "studio", "room_name": "Studio"})
+    res = client.get("/esphome/studio.yaml")
+    assert 'filename="doorplate-studio.yaml"' in res.headers["Content-Disposition"]
+
+
+def test_esphome_config_works_for_archived_room(client):
+    """Archived rooms should still yield a config — enables re-flash before unarchive."""
+    client.post("/rooms", json={"room_id": "acorn", "room_name": "Acorn"})
+    client.post("/rooms/acorn/archive")
+    res = client.get("/esphome/acorn.yaml")
+    assert res.status_code == 200
+    assert 'room_id: "acorn"' in res.get_data(as_text=True)
+
+
+# ---------- room settings page + /config ----------
+
+
+def test_settings_page_served(client):
+    res = client.get("/room/default/settings")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "Flash this sign" in body
+    assert "ESPHome dashboard" in body
+
+
+def test_settings_page_served_for_unknown_room(client):
+    # Mirrors the /room/<id> pattern — page loads, client surfaces the error.
+    res = client.get("/room/ghost/settings")
+    assert res.status_code == 200
+
+
+def test_config_endpoint_returns_null_when_unset(client, monkeypatch):
+    monkeypatch.delenv("ESPHOME_DASHBOARD_URL", raising=False)
+    res = client.get("/config")
+    assert res.status_code == 200
+    assert res.get_json() == {"esphome_dashboard_url": None}
+
+
+def test_config_endpoint_exposes_esphome_url(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setattr(server_module, "ICS_DIR", tmp_path / "ics")
+    monkeypatch.delenv("DOORPLATE_TOKEN", raising=False)
+    monkeypatch.setenv("ESPHOME_DASHBOARD_URL", "http://localhost:6052")
+    app = server_module.create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        res = c.get("/config")
+        assert res.get_json() == {"esphome_dashboard_url": "http://localhost:6052"}
+
+
+def test_config_endpoint_strips_whitespace(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "DATA_FILE", tmp_path / "sign_data.json")
+    monkeypatch.setenv("ESPHOME_DASHBOARD_URL", "   ")  # blank-ish
+    app = server_module.create_app()
+    with app.test_client() as c:
+        res = c.get("/config")
+        assert res.get_json() == {"esphome_dashboard_url": None}

@@ -14,6 +14,7 @@ DATA_DIR = Path(os.environ.get("DOORPLATE_DATA_DIR", str(BASE_DIR)))
 DATA_FILE = DATA_DIR / "sign_data.json"
 ICS_DIR = DATA_DIR / "ics"
 STATIC_DIR = BASE_DIR / "static"
+ESPHOME_YAML = BASE_DIR.parent / "esphome" / "meeting-sign.yaml"
 PUBLISH_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 ROOM_ID_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 THEME_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
@@ -521,6 +522,24 @@ def create_app() -> Flask:
         del room_id
         return send_from_directory(STATIC_DIR, "index.html")
 
+    @app.get("/room/<room_id>/settings")
+    def room_settings(room_id: str):
+        # Same pattern as /room/<id>: let the client fetch /status and
+        # /config; show a friendly error if the room is unknown.
+        del room_id
+        return send_from_directory(STATIC_DIR, "settings.html")
+
+    @app.get("/config")
+    def server_config():
+        """Tiny endpoint surfacing server-level config to the frontend.
+
+        Currently just ESPHOME_DASHBOARD_URL so the per-room settings page
+        can deep-link into the user's local ESPHome dashboard. Null when
+        unset — frontend shows a 'configure this' nudge instead.
+        """
+        url = os.environ.get("ESPHOME_DASHBOARD_URL", "").strip() or None
+        return jsonify({"esphome_dashboard_url": url})
+
     # ---------- status (per-room + legacy alias) ----------
 
     def _status_for(room_id: str):
@@ -631,6 +650,50 @@ def create_app() -> Flask:
         del state["rooms"][room_id]
         _save_state(state)
         return jsonify({"ok": True})
+
+    # ---------- ESPHome config generation ----------
+
+    @app.get("/esphome/<room_id>.yaml")
+    def esphome_config(room_id: str):
+        """Return the canonical meeting-sign.yaml with substitutions filled in.
+
+        Regex-substitutes the server_host and room_id values so comments and
+        formatting in the repo template survive exactly. The user can then
+        `esphome run` the downloaded file without editing anything.
+        """
+        if not _valid_room_id(room_id):
+            return jsonify({"error": "room_id must match [a-z0-9_-]{1,32}"}), 400
+        state = _load_state()
+        if room_id not in state["rooms"]:
+            return jsonify({"error": f"unknown room {room_id!r}"}), 404
+        try:
+            body = ESPHOME_YAML.read_text(encoding="utf-8")
+        except OSError:
+            return jsonify({"error": "esphome template missing"}), 500
+
+        host = request.host.split(":")[0] or "your-mac.local"
+        body = re.sub(
+            r'^(\s*server_host:\s*)"[^"]*"',
+            rf'\1"{host}"',
+            body,
+            count=1,
+            flags=re.M,
+        )
+        body = re.sub(
+            r'^(\s*room_id:\s*)"[^"]*"',
+            rf'\1"{room_id}"',
+            body,
+            count=1,
+            flags=re.M,
+        )
+        return (
+            body,
+            200,
+            {
+                "Content-Type": "text/yaml; charset=utf-8",
+                "Content-Disposition": f'attachment; filename="doorplate-{room_id}.yaml"',
+            },
+        )
 
     # ---------- update (per-room + legacy alias) ----------
 

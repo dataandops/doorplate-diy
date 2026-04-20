@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>doorplate-diy · room settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
+  <link id="theme-css" rel="stylesheet" href="/static/themes/ink.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+    body { min-height: 100vh; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 28px; border-bottom: var(--divider);
+    }
+    .brand { font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+    .brand span { color: var(--accent); }
+    .topbar-meta {
+      display: flex; gap: 14px; align-items: center;
+      font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+    }
+    .btn-ghost {
+      padding: 6px 10px; background: transparent;
+      border: 1px solid var(--border); color: var(--ink);
+      font-family: var(--font-mono); font-size: 12px;
+      text-decoration: none; cursor: pointer; border-radius: var(--radius);
+    }
+    .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+    main { max-width: 780px; margin: 0 auto; padding: 40px 28px 80px; }
+
+    .hero h1 {
+      font-family: var(--font-display); font-weight: 800; font-size: 36px;
+      letter-spacing: -0.02em; margin: 0 0 6px;
+    }
+    .hero .sub {
+      font-family: var(--font-mono); font-size: 13px; color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    section.card {
+      margin-top: 32px; padding: 24px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--paper-elevated);
+    }
+    section.card h2 {
+      margin: 0 0 6px; font-family: var(--font-display);
+      font-weight: 700; font-size: 20px; letter-spacing: -0.01em;
+    }
+    section.card .lede {
+      font-family: var(--font-body); font-size: 14px; color: var(--muted);
+      margin: 0 0 14px; line-height: 1.5;
+    }
+
+    ol.steps { padding-left: 22px; margin: 0; }
+    ol.steps li { margin-bottom: 10px; font-size: 14px; line-height: 1.55; }
+
+    code, pre {
+      font-family: var(--font-mono); font-size: 12.5px;
+      background: var(--muted-bg); color: var(--ink);
+      border-radius: var(--radius);
+    }
+    code { padding: 2px 6px; }
+    pre { padding: 10px 12px; overflow-x: auto; margin: 6px 0 0; }
+    pre code { background: transparent; padding: 0; }
+
+    .btn-primary {
+      display: inline-block; padding: 10px 16px;
+      background: var(--ink); color: var(--paper);
+      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; text-decoration: none;
+      border: 0; border-radius: var(--radius); cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--accent); color: var(--accent-ink); }
+
+    .nudge {
+      margin-top: 10px; padding: 10px 12px;
+      background: var(--muted-bg); border-left: 3px solid var(--muted);
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--ink);
+    }
+    .nudge code { background: var(--paper-elevated); }
+
+    .esphome-link {
+      display: block; margin-top: 6px; font-family: var(--font-mono);
+      font-size: 12.5px; word-break: break-all; color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">doorplate<span>·</span>diy</div>
+    <div class="topbar-meta">
+      <a href="/" class="btn-ghost">← All rooms</a>
+      <a id="control-panel-link" class="btn-ghost" href="#">Control panel</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1 id="room-title">Room settings</h1>
+      <div class="sub" id="room-sub">—</div>
+    </section>
+
+    <section class="card">
+      <h2>Flash this sign</h2>
+      <p class="lede">
+        The sign's firmware is a generated ESPHome config scoped to this room.
+        First flash is over USB; after that, the sign picks up updates over
+        WiFi via OTA — no cable needed.
+      </p>
+
+      <ol class="steps">
+        <li>
+          <strong>Download the config</strong> for this room:
+          <div style="margin-top: 8px;">
+            <a id="download-btn" class="btn-primary" href="#">Download doorplate-&lt;id&gt;.yaml</a>
+          </div>
+        </li>
+        <li>
+          <strong>Move it next to your secrets file</strong> so the
+          <code>!secret</code> includes resolve:
+          <pre><code id="move-cmd">mv ~/Downloads/doorplate-&lt;id&gt;.yaml esphome/</code></pre>
+        </li>
+        <li>
+          <strong>Flash via USB</strong> (plug the driver board into the machine
+          running this command first):
+          <pre><code id="flash-cmd">esphome run esphome/doorplate-&lt;id&gt;.yaml</code></pre>
+          Or the helper: <code id="make-cmd">make flash ROOM=&lt;id&gt;</code>.
+        </li>
+      </ol>
+
+      <div class="nudge">
+        After the first USB flash, <code>esphome run</code> uses OTA
+        automatically — no cable required for updates.
+      </div>
+    </section>
+
+    <section class="card" id="esphome-section">
+      <h2>ESPHome dashboard</h2>
+      <p class="lede">
+        If you run the
+        <a href="https://esphome.io/guides/getting_started_hassio" target="_blank" rel="noopener">
+        ESPHome dashboard</a>, you can edit this sign's config there and push
+        OTA updates from a web UI.
+      </p>
+      <div id="esphome-link-slot"></div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = `${window.location.protocol}//${window.location.host}`;
+    const pathMatch = window.location.pathname.match(/^\/room\/([a-z0-9_-]{1,32})\/settings\/?$/);
+    const roomId = pathMatch ? pathMatch[1] : "default";
+
+    document.getElementById("control-panel-link").href = `/room/${encodeURIComponent(roomId)}`;
+
+    const replaceId = (sel, text) => {
+      document.getElementById(sel).textContent = text;
+    };
+
+    async function loadRoom() {
+      try {
+        const res = await fetch(`${API_BASE}/status/${encodeURIComponent(roomId)}`);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        document.title = `${data.room_name} · settings`;
+        document.getElementById("room-title").textContent = data.room_name;
+        document.getElementById("room-sub").textContent = `id: ${roomId}`;
+        if (data.theme) {
+          document.getElementById("theme-css").href = `/static/themes/${data.theme}.css`;
+        }
+      } catch (err) {
+        document.getElementById("room-title").textContent = `Unknown room: ${roomId}`;
+        document.getElementById("room-sub").textContent =
+          "This room doesn't exist. Return to the dashboard and create it first.";
+      }
+    }
+
+    function renderCommands() {
+      document.getElementById("download-btn").href =
+        `/esphome/${encodeURIComponent(roomId)}.yaml`;
+      document.getElementById("download-btn").setAttribute(
+        "download", `doorplate-${roomId}.yaml`
+      );
+      document.getElementById("download-btn").textContent =
+        `Download doorplate-${roomId}.yaml`;
+      replaceId("move-cmd", `mv ~/Downloads/doorplate-${roomId}.yaml esphome/`);
+      replaceId("flash-cmd", `esphome run esphome/doorplate-${roomId}.yaml`);
+      replaceId("make-cmd", `make flash ROOM=${roomId}`);
+    }
+
+    async function renderEsphomeLink() {
+      const slot = document.getElementById("esphome-link-slot");
+      slot.replaceChildren();
+      let cfg = { esphome_dashboard_url: null };
+      try {
+        const res = await fetch(`${API_BASE}/config`);
+        cfg = await res.json();
+      } catch (_) { /* fall through to nudge */ }
+
+      if (cfg.esphome_dashboard_url) {
+        const base = cfg.esphome_dashboard_url.replace(/\/+$/, "");
+        const link = document.createElement("a");
+        link.className = "esphome-link";
+        link.target = "_blank";
+        link.rel = "noopener";
+        const file = `doorplate-${roomId}.yaml`;
+        link.href = `${base}/?configuration=${encodeURIComponent(file)}`;
+        link.textContent = `→ Edit ${file} in your ESPHome dashboard`;
+        slot.appendChild(link);
+
+        const hint = document.createElement("div");
+        hint.className = "nudge";
+        hint.innerHTML = `Works if you've copied <code>${file}</code> into the ESPHome dashboard's config folder.`;
+        slot.appendChild(hint);
+      } else {
+        const nudge = document.createElement("div");
+        nudge.className = "nudge";
+        nudge.innerHTML =
+          "Set <code>ESPHOME_DASHBOARD_URL=http://localhost:6052</code> in the server's environment " +
+          "to enable a deep-link into your ESPHome dashboard here.";
+        slot.appendChild(nudge);
+      }
+    }
+
+    (async () => {
+      renderCommands();
+      await loadRoom();
+      await renderEsphomeLink();
+    })();
+  </script>
+</body>
+</html>

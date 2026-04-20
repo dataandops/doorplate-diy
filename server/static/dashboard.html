@@ -378,6 +378,15 @@
         open.href = `/room/${encodeURIComponent(r.id)}`;
         open.textContent = "Open →";
         actions.appendChild(open);
+
+        const settings = document.createElement("a");
+        settings.className = "btn-ghost";
+        settings.href = `/room/${encodeURIComponent(r.id)}/settings`;
+        settings.textContent = "⚙";
+        settings.title = "Room settings — flashing, firmware download, ESPHome dashboard";
+        settings.setAttribute("aria-label", "Room settings");
+        actions.appendChild(settings);
+
         if (r.id !== "default") {
           const archive = document.createElement("button");
           archive.type = "button";
