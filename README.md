@@ -77,16 +77,12 @@ Persistent state (`sign_data.json`) lands in `./data/`, which is gitignored.
 **3. Open the control panel** at `http://<your-mac>.local:5000`, edit the
    room name + schedule, and hit **Push to Sign**.
 
-**4. Flash the ESP32** with ESPHome:
+**4. Assemble and flash the sign** — see the [**Assembly**](#assembly)
+and [**Flashing the sign**](#flashing-the-sign) sections below. Rough flow:
+seat the e-paper panel on the driver board, plug in USB-C, run
+`esphome run esphome/meeting-sign.yaml`.
 
-```bash
-cd esphome
-# edit secrets.yaml with your WiFi creds
-# drop Roboto TTFs into esphome/fonts/ (see "Fonts" below)
-esphome run meeting-sign.yaml
-```
-
-**5. Slot the panel into a picture frame** (see **Case** below).
+**5. Slot the panel into a picture frame** (see [**Case**](#case--picture-frame-hack)).
 
 ## Test without hardware
 
@@ -379,6 +375,138 @@ make dev
 Then match it on the sign side (`esphome/meeting-sign.yaml`, substitution
 `doorplate_token`) and in the control panel
 (`localStorage.setItem('doorplateToken', '...')` from the browser console).
+
+## Assembly
+
+End-to-end flow from box-open to hung-on-wall. Budget ~20 minutes for a
+first build; second one goes in 10.
+
+```mermaid
+flowchart TD
+    A[Unbox: panel, driver board, USB-C cable, frame] --> B[Seat e-paper panel on driver board<br/>via 24-pin FPC connector]
+    B --> C{LiPo option?}
+    C -->|yes| D[Clip LiPo into JST-PH 2.0 on driver board]
+    C -->|no| E[Skip — USB-C provides power]
+    D --> F[Plug USB-C into Mac for flashing]
+    E --> F
+    F --> G[Flash firmware<br/>see Flashing the sign]
+    G --> H[Panel refreshes ~20s after WiFi connects<br/>first render = success]
+    H --> I[Unplug from Mac,<br/>plug into wall charger]
+    I --> J[Notch frame back for USB-C cable exit]
+    J --> K[Slide panel into frame,<br/>active area behind glass]
+    K --> L[Driver board sits in cavity,<br/>cable routed out the notch]
+    L --> M[Mount with 3M Command strips]
+```
+
+### Step-by-step
+
+1. **Seat the panel.** The Waveshare ESP32 Driver Board has a 24-pin FPC
+   connector labeled on the silkscreen. Flip the black latch up, slide
+   the panel's flat flex cable in (contacts facing **down** toward the
+   board), and press the latch back down. No loose wires — one connector
+   carries all six signals from the [Wiring](#wiring) table.
+2. **Optional LiPo.** If you're going battery-powered, plug a
+   2000 mAh LiPo with a JST-PH 2.0 pigtail into the driver board's battery
+   header. The onboard charging IC handles top-up whenever USB-C is
+   connected. See [Power](#power) for battery life estimates.
+3. **First boot over USB-C.** Plug the driver board into the Mac that
+   will run the server. This is both your flashing cable and first-boot
+   power. The panel will stay blank until firmware is loaded.
+4. **Flash** — see [Flashing the sign](#flashing-the-sign). Successful
+   first boot looks like: ~20 seconds of silence while the ESP32 connects
+   to WiFi, then the panel draws the default "Meeting Room / AVAILABLE"
+   placard. If it stays blank for >60 s, check your `secrets.yaml`.
+5. **Move to the frame.** Once you see a successful render, unplug from
+   the Mac and plug into a 5 V phone charger. Notch the frame's back
+   (utility knife or small file — 3 mm × 8 mm slot is plenty) to let the
+   USB-C cable exit. Slide the panel into the frame with the active area
+   centered behind the glass; the driver board sits in the shadow-box
+   cavity behind.
+6. **Mount.** 3M Command strips on the frame back. Or use the frame's
+   built-in hanger and run the cable through its existing slot.
+
+## Flashing the sign
+
+[ESPHome](https://esphome.io) is the only build tool you need. Install
+it once, then `esphome run` handles compile + flash + monitor in one
+command.
+
+### Runtime picture
+
+Once flashed, the sign runs on this loop forever:
+
+```mermaid
+sequenceDiagram
+    participant Sign as ESP32 + e-paper
+    participant WiFi
+    participant Server as Flask server<br/>(your Mac)
+    participant Panel as Control panel<br/>(browser)
+
+    Panel->>Server: POST /update/{room_id}
+    Note over Server: saves state to<br/>sign_data.json
+
+    Note over Sign: deep sleep (~10 µA)
+    Sign->>Sign: wake (every 15 min)
+    Sign->>WiFi: connect
+    WiFi->>Server: HTTP GET /status/{room_id}
+    Server-->>Sign: JSON state
+    Sign->>Sign: render to e-paper (~3 s)
+    Sign->>Sign: deep sleep
+```
+
+Everything happens on your LAN — no cloud, no account, no outbound
+dependency beyond NTP for the clock.
+
+### One-time setup
+
+1. **Install ESPHome** (pick one):
+   ```bash
+   pip install esphome          # Python path
+   brew install esphome         # Homebrew
+   # or: docker run --rm -v "${PWD}":/config -it esphome/esphome
+   ```
+2. **Add your WiFi creds.** Copy the template and fill it in:
+   ```bash
+   cp esphome/secrets.example.yaml esphome/secrets.yaml
+   $EDITOR esphome/secrets.yaml     # wifi_ssid, wifi_password, ota_password
+   ```
+   `secrets.yaml` is gitignored.
+3. **Drop the Roboto TTFs** into `esphome/fonts/` (see the
+   [Fonts](#fonts) section for the three files and where to get them).
+4. **Point the firmware at your Mac.** Edit `esphome/meeting-sign.yaml`
+   and set the `server_host` substitution to your Mac's mDNS hostname
+   (`scutil --get LocalHostName | sed 's/$/.local/'`). If you want
+   multiple signs from one server, also set each sign's `room_id`
+   substitution — see [Multiple rooms](#multiple-rooms).
+
+### Flash it
+
+```bash
+# plug the driver board into the Mac via USB-C, then:
+esphome run esphome/meeting-sign.yaml
+```
+
+ESPHome auto-detects the serial port on macOS. First build downloads
+the ESP32 toolchain (~2 min, cached after that). After flashing it
+drops you into a serial monitor — `Ctrl+C` exits.
+
+### Subsequent updates
+
+After the first USB flash, the ESP32 accepts **OTA updates** over WiFi
+— you don't need to physically reach it again:
+
+```bash
+esphome run esphome/meeting-sign.yaml   # auto-picks OTA if it can see the sign
+```
+
+### Troubleshooting first boot
+
+| Symptom | Likely cause |
+| --- | --- |
+| Panel stays blank >60 s | Bad `secrets.yaml` or WiFi out of range — check serial monitor |
+| "HTTP 404" in serial | `server_host` points at the wrong machine, or server isn't running |
+| Garbled / partial render | Font files missing from `esphome/fonts/` |
+| Refreshes but shows "not pushed yet" | Server is up but you haven't clicked **Push to Sign** yet |
 
 ## Case — picture-frame hack
 
