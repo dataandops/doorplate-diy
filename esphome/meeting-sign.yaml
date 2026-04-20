@@ -153,20 +153,22 @@ globals:
     restore_value: no
     initial_value: '""'
 
+# Fonts are fetched from Google Fonts at build time via ESPHome's
+# gfonts:// shorthand and cached under .esphome/. No manual TTF setup.
 font:
-  - file: "fonts/RobotoCondensed-Bold.ttf"
+  - file: "gfonts://Roboto Condensed@bold"
     id: font_title
     size: 36
-  - file: "fonts/RobotoCondensed-Regular.ttf"
+  - file: "gfonts://Roboto Condensed"
     id: font_body
     size: 20
-  - file: "fonts/RobotoMono-Regular.ttf"
+  - file: "gfonts://Roboto Mono"
     id: font_mono
     size: 16
-  - file: "fonts/RobotoCondensed-Bold.ttf"
+  - file: "gfonts://Roboto Condensed@bold"
     id: font_badge
     size: 14
-  - file: "fonts/RobotoCondensed-Regular.ttf"
+  - file: "gfonts://Roboto Condensed"
     id: font_small
     size: 12
 

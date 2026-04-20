@@ -102,20 +102,17 @@ You don't need an ESP32 or e-ink panel to try this end-to-end:
 
 ## Fonts
 
-ESPHome and `render_preview.py` both expect Roboto TTFs in
-`esphome/fonts/` (gitignored). Fetch them once:
+No manual download step. The font files (Roboto Condensed + Roboto Mono,
+Apache-2.0) are fetched on first use:
 
-```bash
-mkdir -p esphome/fonts && cd esphome/fonts
-roboto="https://github.com/googlefonts/roboto/raw/main/src/hinted"
-mono="https://github.com/googlefonts/robotomono/raw/main/fonts/ttf"
-curl -fLO "$roboto/RobotoCondensed-Bold.ttf"
-curl -fLO "$roboto/RobotoCondensed-Regular.ttf"
-curl -fLO "$mono/RobotoMono-Regular.ttf"
-```
+- **ESPHome builds** pull them via `gfonts://` at compile time and cache
+  them under `.esphome/`.
+- **`render_preview.py`** auto-downloads them into `esphome/fonts/`
+  (gitignored) on first run.
 
-Roboto is Apache-2.0 licensed, so it's safe to redistribute — we just don't
-commit the binaries to keep the repo lean.
+If you want to override with a different font, drop your own TTFs into
+`esphome/fonts/` and edit the `font:` block in
+`esphome/meeting-sign.yaml`.
 
 ## Finding your Mac from the sign
 
@@ -471,20 +468,45 @@ dependency beyond NTP for the clock.
    $EDITOR esphome/secrets.yaml     # wifi_ssid, wifi_password, ota_password
    ```
    `secrets.yaml` is gitignored.
-3. **Drop the Roboto TTFs** into `esphome/fonts/` (see the
-   [Fonts](#fonts) section for the three files and where to get them).
-4. **Point the firmware at your Mac.** Edit `esphome/meeting-sign.yaml`
-   and set the `server_host` substitution to your Mac's mDNS hostname
-   (`scutil --get LocalHostName | sed 's/$/.local/'`). If you want
+
+### Flash it — easy path
+
+If your dashboard server is running on the same machine you flash from,
+the dashboard gives you a pre-configured firmware file:
+
+1. Open the dashboard at `http://localhost:5000/`, create the room
+   if it's not the default, then click **Firmware** on its card.
+   Saves as `doorplate-<room_id>.yaml` with `server_host` and
+   `room_id` already filled in.
+2. Move the file next to `esphome/secrets.yaml` so the `!secret`
+   includes resolve:
+   ```bash
+   mv ~/Downloads/doorplate-acorn.yaml esphome/
+   ```
+3. Plug the driver board into USB-C, then:
+   ```bash
+   esphome run esphome/doorplate-acorn.yaml
+   ```
+
+### Flash it — manual path
+
+If you're flashing from a different machine than the server, or want
+to customize the YAML:
+
+<details>
+<summary>Manual edit + flash</summary>
+
+1. Edit `esphome/meeting-sign.yaml` and set the `server_host`
+   substitution to the server's mDNS hostname
+   (`scutil --get LocalHostName | sed 's/$/.local/'`). If driving
    multiple signs from one server, also set each sign's `room_id`
    substitution — see [Multiple rooms](#multiple-rooms).
+2. Plug the driver board into USB-C, then:
+   ```bash
+   esphome run esphome/meeting-sign.yaml
+   ```
 
-### Flash it
-
-```bash
-# plug the driver board into the Mac via USB-C, then:
-esphome run esphome/meeting-sign.yaml
-```
+</details>
 
 ESPHome auto-detects the serial port on macOS. First build downloads
 the ESP32 toolchain (~2 min, cached after that). After flashing it
@@ -505,7 +527,7 @@ esphome run esphome/meeting-sign.yaml   # auto-picks OTA if it can see the sign
 | --- | --- |
 | Panel stays blank >60 s | Bad `secrets.yaml` or WiFi out of range — check serial monitor |
 | "HTTP 404" in serial | `server_host` points at the wrong machine, or server isn't running |
-| Garbled / partial render | Font files missing from `esphome/fonts/` |
+| Garbled / partial render | Font fetch blocked — check build-machine internet |
 | Refreshes but shows "not pushed yet" | Server is up but you haven't clicked **Push to Sign** yet |
 
 ## Case — picture-frame hack

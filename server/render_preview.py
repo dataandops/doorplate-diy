@@ -35,14 +35,32 @@ FONT_FILES = {
     "badge": ("RobotoCondensed-Bold.ttf", 14),
 }
 
+# Google Fonts mirrors for auto-download. ESPHome uses gfonts:// at build
+# time; Pillow can't, so on first run we fetch these once into esphome/fonts/.
+FONT_URLS = {
+    "RobotoCondensed-Bold.ttf": "https://github.com/googlefonts/roboto/raw/main/src/hinted/RobotoCondensed-Bold.ttf",
+    "RobotoCondensed-Regular.ttf": "https://github.com/googlefonts/roboto/raw/main/src/hinted/RobotoCondensed-Regular.ttf",
+    "RobotoMono-Regular.ttf": "https://github.com/googlefonts/robotomono/raw/main/fonts/ttf/RobotoMono-Regular.ttf",
+}
+
+
+def _ensure_fonts() -> None:
+    """Download any missing Roboto TTFs to FONTS_DIR on first run."""
+    FONTS_DIR.mkdir(parents=True, exist_ok=True)
+    for fname in {f for f, _ in FONT_FILES.values()}:
+        target = FONTS_DIR / fname
+        if target.exists():
+            continue
+        url = FONT_URLS.get(fname)
+        if not url:
+            raise FileNotFoundError(f"No download URL configured for {fname}")
+        print(f"Fetching {fname} from Google Fonts…", file=sys.stderr)
+        with urlopen(url, timeout=15) as resp:  # noqa: S310 — trusted github URL
+            target.write_bytes(resp.read())
+
 
 def _load_fonts() -> dict:
-    missing = [f for f, _ in FONT_FILES.values() if not (FONTS_DIR / f).exists()]
-    if missing:
-        raise FileNotFoundError(
-            f"Missing fonts in {FONTS_DIR}: {missing}. "
-            "Drop the Roboto TTFs into esphome/fonts/ (Apache-2.0, from google/fonts)."
-        )
+    _ensure_fonts()
     return {
         k: ImageFont.truetype(str(FONTS_DIR / fname), size)
         for k, (fname, size) in FONT_FILES.items()
